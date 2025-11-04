@@ -25,9 +25,11 @@
 #include <stdbool.h>
 #include <ti_sci.h>
 #include <ti_sci_protocol.h>
-
+#include <stdio.h>
 volatile unsigned int val_mdctl;
 volatile unsigned int val_mdstat;
+volatile uint32_t am62l_lpm_core_status[2] = {0, 0}; // 0 is running, 1 is standby_low_latency, 2 is standby_low_power
+
 
 /* power domain indices */
 #define PD_MPU_CLST		4
@@ -78,6 +80,7 @@ volatile unsigned int val_mdstat;
 static void __unused
 set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t md_state)
 {
+	//printf("\n main psc set state: pd_id=%d, md_id=%d\n", pd_id, md_id);
 	uintptr_t mdctrl_ptr, mdstat_ptr, pdctrl_ptr, pdstat_ptr;
 	volatile uint32_t mdctrl, mdstat, pdctrl, pdstat, psc_ptstat, psc_ptcmd;
 	uint64_t tick_start, timeout_ticks;
@@ -96,7 +99,7 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 	pdstat = mmio_read_32(pdstat_ptr);
 
 	INFO("%s: before: md_id=%d, mdstat=0x%x, pdstat=0x%x\n", __func__, md_id, mdstat, pdstat);
-
+	//printf("%s: before: md_id=%d, mdstat=0x%x, pdstat=0x%x\n", __func__, md_id, mdstat, pdstat);
 	if (((pdstat & 0x1) == pd_state) && ((mdstat & 0x1f) == md_state))
 		return;
 
@@ -119,15 +122,12 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 
 	// Set PDCTL NEXT to new state
 	mmio_write_32(pdctrl_ptr, (pdctrl & ~(0x1)) | pd_state);
-
 	// Set MDCTL NEXT to new state
 	mmio_write_32(mdctrl_ptr, (mdctrl & ~(0x1f)) | md_state);
-
 	// Start power transition by setting PTCMD Go to 1
 	psc_ptcmd = mmio_read_32(MAIN_PSC_PTCMD);
 	psc_ptcmd |= (0x1 << pd_id);
 	mmio_write_32(MAIN_PSC_PTCMD, psc_ptcmd);
-
 	// return early in case powering off
 	// This prevents the core from timing out waiting for GOSTAT to clear
 	if (md_state == PSC_SYNCRESETDISABLE)
@@ -151,9 +151,11 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 	//check states
 	mdstat = mmio_read_32(mdstat_ptr);
 	pdstat = mmio_read_32(pdstat_ptr);
-
 	INFO("%s: after: md_id=%d, mdstat=0x%x, pdstat=0x%x\n", __func__, md_id, mdstat, pdstat);
 }
+
+#define PLL_HSDIV_CHANGE(addr, val) \
+	mmio_write_32(addr, mmio_read_32(addr) | (val))
 
 #define CORE_PWR_STATE(state) ((state)->pwr_domain_state[MPIDR_AFFLVL0])
 #define CLUSTER_PWR_STATE(state) ((state)->pwr_domain_state[MPIDR_AFFLVL1])
@@ -165,8 +167,116 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 uintptr_t am62l_sec_entrypoint;
 uintptr_t am62l_sec_entrypoint_glob;
 
+#define MAIN_PLL_MMR_CFG_BASE	(0x04060000UL)
+#define WKUP_PLL_MMR_CFG_BASE   (0x04040000UL)
+
+#define MAIN_PLL0_HSDIVx(x)	MAIN_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
+#define MAIN_PLL8_BASE MAIN_PLL_MMR_CFG_BASE + 0x1000 * 8
+#define MAIN_PLL8_CTRL MAIN_PLL8_BASE + 0x20
+#define MAIN_PLL17_BASE MAIN_PLL_MMR_CFG_BASE + 0x1000 * 17
+#define MAIN_PLL17_CTRL MAIN_PLL17_BASE + 0x20
+#define WKUP_MAIN_PLL0_HSDIVx(x)	WKUP_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
+
+static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
+	return;
+	// MAIN_PLL0 
+	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
+	mmio_write_32(MAIN_PLL0_HSDIVx(5), (pll_hsdiv_val[5] & ~(0xff)) | 0x4);
+	mmio_write_32(MAIN_PLL0_HSDIVx(6), (pll_hsdiv_val[6] & ~(0xff)) | 0x3);
+	mmio_write_32(MAIN_PLL0_HSDIVx(7), (pll_hsdiv_val[7] & ~(0xff)) | 0x5);
+	mmio_write_32(MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[8] & ~(0xff)) | 0x27);
+	mmio_write_32(MAIN_PLL0_HSDIVx(9), (pll_hsdiv_val[9] & ~(0x8000)));
+
+	//Might need to do DDR in low FSP
+
+	// A53 running of Bypass clock
+	mmio_write_32(MAIN_PLL8_CTRL, mmio_read_32(MAIN_PLL8_CTRL) | 0x80000000);
+
+	return;
+}
+
+static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
+	return;
+	// MAIN_PLL0
+	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
+	mmio_write_32(MAIN_PLL0_HSDIVx(3), (pll_hsdiv_val[3] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(4), (pll_hsdiv_val[4] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(5), (pll_hsdiv_val[5] & ~(0xff)) | 0x4);														
+	mmio_write_32(MAIN_PLL0_HSDIVx(6), (pll_hsdiv_val[6] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(7), (pll_hsdiv_val[7] & ~(0xff)) | 0x5);
+	mmio_write_32(MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[8] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(9), (pll_hsdiv_val[9] & ~(0x8000)));
+
+	//Might need to do DDR in Self Refresh
+
+	// Jumping to wkupsram to disable ARM PLL
+	k3_suspend_to_ram(11);
+
+	// MAIN PLL17 - disable
+	mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) & ~(0x00008000));
+
+	// WKUP PLL - disable 
+	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) & ~(0x8000)));
+	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) & ~(0x8000)));
+
+	return;
+}
+static void am62l_cpu_standby(plat_local_state_t cpu_state)
+{
+        u_register_t scr;
+		scr = read_scr_el3();
+		write_scr_el3(scr | SCR_IRQ_BIT | SCR_FIQ_BIT);  
+
+		uint32_t core = plat_my_core_pos();
+		am62l_lpm_core_status[core] = cpu_state;
+
+		/* Save PLL */
+		volatile uint32_t pll_hsdiv_val[10];
+		for(int i=0;i<10;i++){
+			pll_hsdiv_val[i] = mmio_read_32(MAIN_PLL0_HSDIVx(i));
+		}
+
+		/* Enable the Non secure interrupt to wake the CPU */
+		if(cpu_state == 0x1){  // low latency standby
+			low_latency_standby(pll_hsdiv_val);		
+		}
+		else if(cpu_state == 0x2){ // low power standby
+			low_power_standby(pll_hsdiv_val);
+		}
+		isb();
+		/* dsb is good practice before using wfi to enter low power states */
+		dsb();
+		/* Enter standby state */
+		wfi();
+
+		/* Restore PLL */
+		for(int i=0;i<10;i++){
+			mmio_write_32(MAIN_PLL0_HSDIVx(i), pll_hsdiv_val[i]);
+		}
+
+		if(cpu_state == 0x1){  // low latency standby
+		// MAIN_PLL8 - bypass disable
+		mmio_write_32(MAIN_PLL8_CTRL, mmio_read_32(MAIN_PLL8_CTRL) & ~(0x80000000));
+		}
+
+		else if(cpu_state == 0x2){ // low power standby
+		// Jumping to wkupsram to restore ARM PLL
+		k3_suspend_to_ram(12);
+		//MAIN PLL17 - enable
+		mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) | 0x0008000);
+		//WKUP PLL - enable
+		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) | (0x8000)));
+		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) | (0x8000)));
+		}
+		am62l_lpm_core_status[core] = 0;
+		/* Restore SCR */
+		write_scr_el3(scr);
+	
+}
+
 static int am62l_pwr_domain_on(u_register_t mpidr)
 {
+	//printf("\n Entered am62l_pwr_domain_on with %lu\n",mpidr);
 	int core, proc_id, ret;
 
 	core = plat_core_pos_by_mpidr(mpidr);
@@ -210,6 +320,7 @@ static int am62l_pwr_domain_on(u_register_t mpidr)
 
 static void am62l_pwr_domain_off(const psci_power_state_t *target_state)
 {
+	//printf("\n Entered am62l_pwr_domain_off");
 	/* At very least the local core should be powering down */
 	assert(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE);
 
@@ -219,6 +330,7 @@ static void am62l_pwr_domain_off(const psci_power_state_t *target_state)
 
 static void __dead2 am62l_pwr_domain_off_wfi(const psci_power_state_t *target_state)
 {
+	//printf("\n Entered am62l_power_domain_off_wfi");
 	int core;
 	core = plat_my_core_pos();
 
@@ -255,17 +367,36 @@ static void __dead2 am62l_system_reset(void)
 		wfi();
 }
 
-static int k3_validate_power_state(unsigned int power_state,
+static int am62l_validate_power_state(unsigned int power_state,
 				   psci_power_state_t *req_state)
 {
 	/* TODO: perform the proper validation */
+	//printf("\n Entered am62l_validate_power_state");
+	unsigned int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
+	unsigned int pstate = psci_get_pstate_type(power_state);
+
+	if (pwr_lvl > PLAT_MAX_PWR_LVL)
+			return PSCI_E_INVALID_PARAMS;
+
+	if (pstate == PSTATE_TYPE_STANDBY) {
+			/*
+				* It's possible to enter standby only on power level 0
+				* Ignore any other power level.
+				*/
+			if (pwr_lvl != MPIDR_AFFLVL0)
+					return PSCI_E_INVALID_PARAMS;
+
+			CORE_PWR_STATE(req_state) = (power_state & 0x3U);
+	}
 
 	return PSCI_E_SUCCESS;
+
 }
 
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
+	//printf("\n Entered am62l_power_domain_suspend");
 	unsigned int core, proc_id;
 	uint64_t  context_save_addr = 0x80A00000;
 	/* TODO: Pass the mode passed from kernel using s2idle
@@ -298,6 +429,7 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {
+	 //printf("\n Entered %s\n)",__func__);
 	/* Remove the I/O isolation */
 	k3_lpm_set_io_isolation(false);
 	/* Initialize the console to provide early debug support */
@@ -313,7 +445,7 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 static void am62l_get_sys_suspend_power_state(psci_power_state_t *req_state)
 {
 	unsigned int i;
-
+	//printf("\n Entered %s\n)",__func__);
 	/* CPU & cluster off, system in retention */
 	for (i = MPIDR_AFFLVL0; i <= PLAT_MAX_PWR_LVL; i++) {
 		req_state->pwr_domain_state[i] = PLAT_MAX_OFF_STATE;
@@ -322,6 +454,7 @@ static void am62l_get_sys_suspend_power_state(psci_power_state_t *req_state)
 #endif
 
 static plat_psci_ops_t am62l_plat_psci_ops = {
+	.cpu_standby = am62l_cpu_standby,
 	.pwr_domain_on = am62l_pwr_domain_on,
 	.pwr_domain_off = am62l_pwr_domain_off,
 	.pwr_domain_pwr_down_wfi = am62l_pwr_domain_off_wfi,
@@ -332,7 +465,7 @@ static plat_psci_ops_t am62l_plat_psci_ops = {
 	.get_sys_suspend_power_state = am62l_get_sys_suspend_power_state,
 #endif
 	.system_reset = am62l_system_reset,
-	.validate_power_state = k3_validate_power_state,
+	.validate_power_state = am62l_validate_power_state,
 };
 
 void  __aligned(16) jump_to_atf_func(void)

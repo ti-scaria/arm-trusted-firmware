@@ -439,7 +439,19 @@ __wkupsramsuspendentry void k3_lpm_stub_entry(uint32_t mode)
 			wfi();
 			lpm_seq_trace_fail(0xF0);
 		}
-	} else  {
+	} 
+	else if (mode == 11) {
+		pll_save(&main_pll8);
+		lpm_seq_trace(0x1)
+
+		pll_disable(&main_pll8);
+		lpm_seq_trace(0x2);
+	}
+	else if (mode == 12) {
+		pll_restore(&main_pll8);
+		lpm_seq_trace(0x3);
+	}
+	else  {
 		for (;;) {
 			lpm_seq_trace_fail(0xF1);
 		}
@@ -607,6 +619,11 @@ static void k3_lpm_jump_to_stub(uint32_t mode)
 	INFO("k3_lpm_jump_to_stub x%lx\n", (unsigned long)K3_SUSPEND_ENTRY);
 
 	k3_lpm_switch_stack(jump, stack, mode);
+
+	/* Enable MMU */
+	sctlr = (uint32_t)read_sctlr_el3();
+	sctlr |= SCTLR_EL3_M_BIT;
+	write_sctlr_el3((uint64_t)sctlr);
 }
 
 int32_t k3_lpm_stub_copy_to_sram(void)
