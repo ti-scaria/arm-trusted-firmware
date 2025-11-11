@@ -171,6 +171,62 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 uintptr_t am62l_sec_entrypoint;
 uintptr_t am62l_sec_entrypoint_glob;
 
+#define MAIN_PLL_MMR_CFG_BASE	(0x04060000UL)
+#define WKUP_PLL_MMR_CFG_BASE   (0x04040000UL)
+
+#define MAIN_PLL0_HSDIVx(x)	MAIN_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
+#define MAIN_PLL8_BASE MAIN_PLL_MMR_CFG_BASE + 0x1000 * 8
+#define MAIN_PLL8_CTRL MAIN_PLL8_BASE + 0x20
+#define MAIN_PLL17_BASE MAIN_PLL_MMR_CFG_BASE + 0x1000 * 17
+#define MAIN_PLL17_CTRL MAIN_PLL17_BASE + 0x20
+#define WKUP_MAIN_PLL0_HSDIVx(x)	WKUP_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
+
+#define CLUSTER_SHALLOW_IDLE_STATE 0x1
+#define CLUSTER_DEEP_IDLE_STATE 0x2
+
+static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
+	// MAIN_PLL0
+	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
+	mmio_write_32(MAIN_PLL0_HSDIVx(5), (pll_hsdiv_val[5] & ~(0xff)) | 0x4);
+	mmio_write_32(MAIN_PLL0_HSDIVx(6), (pll_hsdiv_val[6] & ~(0xff)) | 0x3);
+	mmio_write_32(MAIN_PLL0_HSDIVx(7), (pll_hsdiv_val[7] & ~(0xff)) | 0x5);
+	mmio_write_32(MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[8] & ~(0xff)) | 0x27);
+	mmio_write_32(MAIN_PLL0_HSDIVx(9), (pll_hsdiv_val[9] & ~(0x8000)));
+
+	//Need to do DDR in low FSP
+
+	// A53 running of Bypass clock
+	mmio_write_32(MAIN_PLL8_CTRL, mmio_read_32(MAIN_PLL8_CTRL) | 0x80000000);
+
+	return;
+}
+
+static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
+	// MAIN_PLL0
+	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
+	mmio_write_32(MAIN_PLL0_HSDIVx(3), (pll_hsdiv_val[3] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(4), (pll_hsdiv_val[4] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(5), (pll_hsdiv_val[5] & ~(0xff)) | 0x4);
+	mmio_write_32(MAIN_PLL0_HSDIVx(6), (pll_hsdiv_val[6] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(7), (pll_hsdiv_val[7] & ~(0xff)) | 0x5);
+	mmio_write_32(MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[8] & ~(0x8000)));
+	mmio_write_32(MAIN_PLL0_HSDIVx(9), (pll_hsdiv_val[9] & ~(0x8000)));
+
+	//Need to do DDR in Self Refresh
+
+	// Jumping to wkupsram to disable ARM PLL
+	k3_suspend_to_ram(11);
+
+	// MAIN PLL17 - disable
+	mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) & ~(0x00008000));
+
+	// WKUP PLL - disable
+	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) & ~(0x8000)));
+	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) & ~(0x8000)));
+
+	return;
+}
+
 static void am62l_cpu_standby(plat_local_state_t cpu_state)
 {
 	u_register_t scr;
@@ -288,14 +344,12 @@ static int k3_validate_power_state(unsigned int power_state,
 		return PSCI_E_INVALID_PARAMS;
 
 	if (pstate == PSTATE_TYPE_STANDBY) {
-		/*
-		 * It's possible to enter standby only on power level 0
-		 * Ignore any other power level.
-		 */
-		if (pwr_lvl != MPIDR_AFFLVL0)
-			return PSCI_E_INVALID_PARAMS;
-
 		CORE_PWR_STATE(req_state) = PLAT_MAX_RET_STATE;
+
+		if(pwr_lvl >= MPIDR_AFFLVL1) {
+			CLUSTER_PWR_STATE(req_state) = (power_state & 0x7U);
+		}
+
 	} else if (pstate && PSTATE_TYPE_POWERDOWN) {
 		INFO("%s: (core %d): s2idle: power_state: 0x%x\n", __func__, core, power_state);
 		CORE_PWR_STATE(req_state) = PLAT_MAX_OFF_STATE;
@@ -308,57 +362,98 @@ static int k3_validate_power_state(unsigned int power_state,
 	return PSCI_E_SUCCESS;
 }
 
+uint32_t pll_hsdiv_val[10];
+
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
-	unsigned int core, proc_id;
-	uint64_t  context_save_addr = 0x80A00000;
-	/*
-	 * mode=6 for RTC only + DDR and mode=0 for deepsleep
-	 */
-	uint32_t mode = am62l_lpm_state;
+	if(CORE_PWR_STATE(target_state) == PLAT_MAX_RET_STATE){
+		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 
-	core = plat_my_core_pos();
-	proc_id = PLAT_PROC_START_ID + core;
-
-	/* Prevent interrupts from spuriously waking up this cpu */
-	k3_gic_cpuif_disable();
-	k3_gic_save_context();
-	clks_suspend();
-
-	if ((mode == 0) || (mode == 6)) {
-		INFO("Started Suspend Sequence in ATF\n");
-		/* Isolate the I/Os to allow I/O Daisy chain wakeup */
-		k3_lpm_set_io_isolation(true);
-		k3_lpm_config_magic_words(mode);
-		ti_sci_prepare_sleep(mode, context_save_addr, 0);
-		INFO("sent prepare message\n");
-		k3_config_wake_sources(true);
-		ti_sci_enter_sleep(proc_id, mode, am62l_sec_entrypoint);
-		INFO("sent enter sleep message\n");
+		for(int i=0;i<10;i++){
+			pll_hsdiv_val[i] = mmio_read_32(MAIN_PLL0_HSDIVx(i));
+		}
+		if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){
+			low_latency_standby(pll_hsdiv_val);
+		}
+		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){
+			low_power_standby(pll_hsdiv_val);
+		}
 	}
+	if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){
+		unsigned int core, proc_id;
+		uint64_t  context_save_addr = 0x80A00000;
+		/*
+		* mode=6 for RTC only + DDR and mode=0 for deepsleep
+		*/
+		uint32_t mode = am62l_lpm_state;
 
-	k3_suspend_to_ram(mode);
+		core = plat_my_core_pos();
+		proc_id = PLAT_PROC_START_ID + core;
+
+		/* Prevent interrupts from spuriously waking up this cpu */
+		k3_gic_cpuif_disable();
+		k3_gic_save_context();
+		clks_suspend();
+
+		if ((mode == 0) || (mode == 6)) {
+			INFO("Started Suspend Sequence in ATF\n");
+			/* Isolate the I/Os to allow I/O Daisy chain wakeup */
+			k3_lpm_set_io_isolation(true);
+			k3_lpm_config_magic_words(mode);
+			ti_sci_prepare_sleep(mode, context_save_addr, 0);
+			INFO("sent prepare message\n");
+			k3_config_wake_sources(true);
+			ti_sci_enter_sleep(proc_id, mode, am62l_sec_entrypoint);
+			INFO("sent enter sleep message\n");
+		}
+
+		k3_suspend_to_ram(mode);
+	}
 }
 
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {
-	/* Remove the I/O isolation */
-	k3_lpm_set_io_isolation(false);
-	/* Initialize the console to provide early debug support */
-	k3_console_setup();
-	k3_config_wake_sources(false);
-	k3_gic_restore_context();
-	k3_gic_cpuif_enable();
-	ti_init_scmi_server();
-	k3_lpm_stub_copy_to_sram();
-	clks_resume();
+	uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
+	if(CORE_PWR_STATE(target_state) == PLAT_MAX_RET_STATE){
+		/* Restore PLL */
+		for(int i=0;i<10;i++){
+			mmio_write_32(MAIN_PLL0_HSDIVx(i), pll_hsdiv_val[i]);
+		}
 
-	/* 60 irqn = RTC */
-	gicv3_set_spi_routing(60, GICV3_IRM_ANY, 0);
-	gicv3_enable_interrupt(60, 0);
-	gicv3_set_interrupt_pending(60, 0);
-	plat_ic_raise_ns_sgi(60, 0);
+		if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){  // low latency standby
+		// MAIN_PLL8 - bypass disable
+			mmio_write_32(MAIN_PLL8_CTRL, mmio_read_32(MAIN_PLL8_CTRL) & ~(0x80000000));
+		}
+
+		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){ // low power standby
+			// Jumping to wkupsram to restore ARM PLL
+			k3_suspend_to_ram(12);
+			//MAIN PLL17 - enable
+			mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) | 0x0008000);
+			//WKUP PLL - enable
+			mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) | (0x8000)));
+			mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) | (0x8000)));
+		}
+	}
+	if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){	
+		/* Remove the I/O isolation */
+		k3_lpm_set_io_isolation(false);
+		/* Initialize the console to provide early debug support */
+		k3_console_setup();
+		k3_config_wake_sources(false);
+		k3_gic_restore_context();
+		k3_gic_cpuif_enable();
+		ti_init_scmi_server();
+		k3_lpm_stub_copy_to_sram();
+		clks_resume();
+
+		/* 60 irqn = RTC */
+		gicv3_set_spi_routing(60, GICV3_IRM_ANY, 0);
+		gicv3_enable_interrupt(60, 0);
+		gicv3_set_interrupt_pending(60, 0);
+		plat_ic_raise_ns_sgi(60, 0);
+	}
 }
 
 static void am62l_get_sys_suspend_power_state(psci_power_state_t *req_state)
