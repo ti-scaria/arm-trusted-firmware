@@ -27,6 +27,7 @@
 #include <stdbool.h>
 #include <ti_sci.h>
 #include <ti_sci_protocol.h>
+#include <stdio.h>
 
 volatile unsigned int val_mdctl;
 volatile unsigned int val_mdstat;
@@ -336,6 +337,7 @@ static void __dead2 am62l_system_reset(void)
 static int k3_validate_power_state(unsigned int power_state,
 				   psci_power_state_t *req_state)
 {
+	// ERROR("\n Entering here \n");
 	unsigned int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
 	unsigned int pstate = psci_get_pstate_type(power_state);
 	unsigned int core = plat_my_core_pos();
@@ -344,7 +346,7 @@ static int k3_validate_power_state(unsigned int power_state,
 		return PSCI_E_INVALID_PARAMS;
 
 	if (pstate == PSTATE_TYPE_STANDBY) {
-		CORE_PWR_STATE(req_state) = PLAT_MAX_RET_STATE;
+		CORE_PWR_STATE(req_state) = 15;
 
 		if(pwr_lvl >= MPIDR_AFFLVL1) {
 			CLUSTER_PWR_STATE(req_state) = (power_state & 0x7U);
@@ -367,7 +369,8 @@ uint32_t pll_hsdiv_val[10];
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
-	if(CORE_PWR_STATE(target_state) == PLAT_MAX_RET_STATE){
+	//ERROR("\n core power state = %d and cluster = %d\n",CORE_PWR_STATE(target_state),CLUSTER_PWR_STATE(target_state));
+	if(CORE_PWR_STATE(target_state) == 15 /*&& CLUSTER_PWR_STATE(target_state) != 0*/){
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 
 		for(int i=0;i<10;i++){
@@ -379,8 +382,10 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){
 			low_power_standby(pll_hsdiv_val);
 		}
+		return;
 	}
-	if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){
+	//ERROR("\n not entering here \n");
+	//if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){
 		unsigned int core, proc_id;
 		uint64_t  context_save_addr = 0x80A00000;
 		/*
@@ -405,17 +410,18 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 			INFO("sent prepare message\n");
 			k3_config_wake_sources(true);
 			ti_sci_enter_sleep(proc_id, mode, am62l_sec_entrypoint);
-			INFO("sent enter sleep message\n");
+			ERROR("sent enter sleep message\n");
 		}
 
 		k3_suspend_to_ram(mode);
-	}
+	//}
 }
 
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {
-	uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
-	if(CORE_PWR_STATE(target_state) == PLAT_MAX_RET_STATE){
+	//ERROR("\n finish : core power state = %d and cluster = %d\n",CORE_PWR_STATE(target_state),CLUSTER_PWR_STATE(target_state));	
+	if(CORE_PWR_STATE(target_state) == 15 /*&& CLUSTER_PWR_STATE(target_state) != 0*/){
+		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 		/* Restore PLL */
 		for(int i=0;i<10;i++){
 			mmio_write_32(MAIN_PLL0_HSDIVx(i), pll_hsdiv_val[i]);
@@ -435,8 +441,10 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 			mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) | (0x8000)));
 			mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) | (0x8000)));
 		}
+		return;
 	}
-	if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){	
+		//ERROR("\n  here \n");
+	//if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){	
 		/* Remove the I/O isolation */
 		k3_lpm_set_io_isolation(false);
 		/* Initialize the console to provide early debug support */
@@ -447,17 +455,18 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 		ti_init_scmi_server();
 		k3_lpm_stub_copy_to_sram();
 		clks_resume();
-
+		//ERROR("\n  here \n");
 		/* 60 irqn = RTC */
 		gicv3_set_spi_routing(60, GICV3_IRM_ANY, 0);
 		gicv3_enable_interrupt(60, 0);
 		gicv3_set_interrupt_pending(60, 0);
 		plat_ic_raise_ns_sgi(60, 0);
-	}
+	//}
 }
 
 static void am62l_get_sys_suspend_power_state(psci_power_state_t *req_state)
 {
+	//ERROR("\n %s \n",__func__);
 	unsigned int i;
 
 	/* CPU & cluster off, system in retention */

@@ -627,6 +627,11 @@ static void k3_lpm_jump_to_stub(uint32_t mode)
 	INFO("k3_lpm_jump_to_stub x%lx\n", (unsigned long)K3_SUSPEND_ENTRY);
 
 	k3_lpm_switch_stack(jump, stack, mode);
+
+	/* Enable MMU */
+	sctlr = (uint32_t)read_sctlr_el3();
+	sctlr |= SCTLR_EL3_M_BIT;
+	write_sctlr_el3((uint64_t)sctlr);
 }
 
 int32_t k3_lpm_stub_copy_to_sram(void)
