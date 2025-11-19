@@ -83,6 +83,7 @@ volatile uint32_t am62l_lpm_state = 0;
 static void __unused
 set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t md_state)
 {
+	//printf("\n main psc set state: pd_id=%d, md_id=%d\n", pd_id, md_id);
 	uintptr_t mdctrl_ptr, mdstat_ptr, pdctrl_ptr, pdstat_ptr;
 	volatile uint32_t mdctrl, mdstat, pdctrl, pdstat, psc_ptstat, psc_ptcmd;
 	uint64_t tick_start, timeout_ticks;
@@ -101,7 +102,7 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 	pdstat = mmio_read_32(pdstat_ptr);
 
 	INFO("%s: before: md_id=%d, mdstat=0x%x, pdstat=0x%x\n", __func__, md_id, mdstat, pdstat);
-
+	//printf("%s: before: md_id=%d, mdstat=0x%x, pdstat=0x%x\n", __func__, md_id, mdstat, pdstat);
 	if (((pdstat & 0x1) == pd_state) && ((mdstat & 0x1f) == md_state))
 		return;
 
@@ -124,15 +125,12 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 
 	// Set PDCTL NEXT to new state
 	mmio_write_32(pdctrl_ptr, (pdctrl & ~(0x1)) | pd_state);
-
 	// Set MDCTL NEXT to new state
 	mmio_write_32(mdctrl_ptr, (mdctrl & ~(0x1f)) | md_state);
-
 	// Start power transition by setting PTCMD Go to 1
 	psc_ptcmd = mmio_read_32(MAIN_PSC_PTCMD);
 	psc_ptcmd |= (0x1 << pd_id);
 	mmio_write_32(MAIN_PSC_PTCMD, psc_ptcmd);
-
 	// return early in case powering off
 	// This prevents the core from timing out waiting for GOSTAT to clear
 	if (md_state == PSC_SYNCRESETDISABLE)
@@ -156,7 +154,6 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 	//check states
 	mdstat = mmio_read_32(mdstat_ptr);
 	pdstat = mmio_read_32(pdstat_ptr);
-
 	INFO("%s: after: md_id=%d, mdstat=0x%x, pdstat=0x%x\n", __func__, md_id, mdstat, pdstat);
 }
 
@@ -246,6 +243,7 @@ static void am62l_cpu_standby(plat_local_state_t cpu_state)
 
 static int am62l_pwr_domain_on(u_register_t mpidr)
 {
+	//printf("\n Entered am62l_pwr_domain_on with %lu\n",mpidr);
 	int core, proc_id, ret;
 
 	core = plat_core_pos_by_mpidr(mpidr);
@@ -289,6 +287,7 @@ static int am62l_pwr_domain_on(u_register_t mpidr)
 
 static void am62l_pwr_domain_off(const psci_power_state_t *target_state)
 {
+	//printf("\n Entered am62l_pwr_domain_off");
 	/* At very least the local core should be powering down */
 	assert(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE);
 
@@ -298,6 +297,7 @@ static void am62l_pwr_domain_off(const psci_power_state_t *target_state)
 
 static void __dead2 am62l_pwr_domain_off_wfi(const psci_power_state_t *target_state)
 {
+	//printf("\n Entered am62l_power_domain_off_wfi");
 	int core;
 	core = plat_my_core_pos();
 
@@ -334,7 +334,7 @@ static void __dead2 am62l_system_reset(void)
 		wfi();
 }
 
-static int k3_validate_power_state(unsigned int power_state,
+static int am62l_validate_power_state(unsigned int power_state,
 				   psci_power_state_t *req_state)
 {
 	unsigned int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
@@ -361,6 +361,7 @@ static int k3_validate_power_state(unsigned int power_state,
 	}
 
 	return PSCI_E_SUCCESS;
+
 }
 
 uint32_t pll_hsdiv_val[10];
@@ -462,7 +463,7 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 static void am62l_get_sys_suspend_power_state(psci_power_state_t *req_state)
 {
 	unsigned int i;
-
+	//printf("\n Entered %s\n)",__func__);
 	/* CPU & cluster off, system in retention */
 	for (i = MPIDR_AFFLVL0; i <= PLAT_MAX_PWR_LVL; i++) {
 		req_state->pwr_domain_state[i] = PLAT_MAX_OFF_STATE;
@@ -486,7 +487,7 @@ static plat_psci_ops_t am62l_plat_psci_ops = {
 	.get_sys_suspend_power_state = am62l_get_sys_suspend_power_state,
 #endif
 	.system_reset = am62l_system_reset,
-	.validate_power_state = k3_validate_power_state,
+	.validate_power_state = am62l_validate_power_state,
 };
 
 void  __aligned(16) jump_to_atf_func(void)
