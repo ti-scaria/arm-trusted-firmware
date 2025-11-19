@@ -668,6 +668,7 @@ int psci_validate_state_coordination(unsigned int cpu_idx, unsigned int end_pwrl
 	 * Verify that the current core is the last running core at the
 	 * specified power level.
 	 */
+	//state_info->last_at_pwrlvl = 0;
 	lvl = state_info->last_at_pwrlvl;
 	if (!psci_is_last_cpu_to_idle_at_pwrlvl(cpu_idx, lvl)) {
 		rc = PSCI_E_DENIED;

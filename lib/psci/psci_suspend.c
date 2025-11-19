@@ -207,7 +207,7 @@ int psci_cpu_suspend_start(unsigned int idx,
 	 */
 
 	psci_plat_pm_ops->pwr_domain_suspend(state_info);
-
+	
 #if ENABLE_PSCI_STAT
 	plat_psci_stat_accounting_start(state_info);
 #endif

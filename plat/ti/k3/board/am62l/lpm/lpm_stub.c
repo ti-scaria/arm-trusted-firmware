@@ -451,7 +451,7 @@ __wkupsramsuspendentry void k3_lpm_stub_entry(uint32_t mode)
 		}
 	} else if (mode == 11) {
 		pll_save(&main_pll8);
-		lpm_seq_trace(0x1)
+		lpm_seq_trace(0x1);
 
 		pll_disable(&main_pll8);
 		lpm_seq_trace(0x2);

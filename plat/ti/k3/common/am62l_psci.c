@@ -182,8 +182,8 @@ uintptr_t am62l_sec_entrypoint_glob;
 #define MAIN_PLL17_CTRL MAIN_PLL17_BASE + 0x20
 #define WKUP_MAIN_PLL0_HSDIVx(x)	WKUP_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
 
-#define CLUSTER_SHALLOW_IDLE_STATE 0x1
-#define CLUSTER_DEEP_IDLE_STATE 0x2
+#define CLUSTER_SHALLOW_IDLE_STATE 0x3
+#define CLUSTER_DEEP_IDLE_STATE 0x4
 
 static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	// MAIN_PLL0
@@ -337,7 +337,6 @@ static void __dead2 am62l_system_reset(void)
 static int k3_validate_power_state(unsigned int power_state,
 				   psci_power_state_t *req_state)
 {
-	// ERROR("\n Entering here \n");
 	unsigned int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
 	unsigned int pstate = psci_get_pstate_type(power_state);
 	unsigned int core = plat_my_core_pos();
@@ -346,10 +345,10 @@ static int k3_validate_power_state(unsigned int power_state,
 		return PSCI_E_INVALID_PARAMS;
 
 	if (pstate == PSTATE_TYPE_STANDBY) {
-		CORE_PWR_STATE(req_state) = 15;
+		CORE_PWR_STATE(req_state) = 5;
 
 		if(pwr_lvl >= MPIDR_AFFLVL1) {
-			CLUSTER_PWR_STATE(req_state) = (power_state & 0x7U);
+			CLUSTER_PWR_STATE(req_state) = (power_state & 0x7U) + 2;
 		}
 
 	} else if (pstate && PSTATE_TYPE_POWERDOWN) {
@@ -369,8 +368,8 @@ uint32_t pll_hsdiv_val[10];
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
-	//ERROR("\n core power state = %d and cluster = %d\n",CORE_PWR_STATE(target_state),CLUSTER_PWR_STATE(target_state));
-	if(CORE_PWR_STATE(target_state) == 15 /*&& CLUSTER_PWR_STATE(target_state) != 0*/){
+	/* Entering cluster standby sequence */
+	if(CORE_PWR_STATE(target_state) == 5 ){
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 
 		for(int i=0;i<10;i++){
@@ -384,43 +383,41 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		}
 		return;
 	}
-	//ERROR("\n not entering here \n");
-	//if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){
-		unsigned int core, proc_id;
-		uint64_t  context_save_addr = 0x80A00000;
-		/*
-		* mode=6 for RTC only + DDR and mode=0 for deepsleep
-		*/
-		uint32_t mode = am62l_lpm_state;
+	/* Entering system suspend sequence*/
+	unsigned int core, proc_id;
+	uint64_t  context_save_addr = 0x80A00000;
+	/*
+	* mode=6 for RTC only + DDR and mode=0 for deepsleep
+	*/
+	uint32_t mode = am62l_lpm_state;
 
-		core = plat_my_core_pos();
-		proc_id = PLAT_PROC_START_ID + core;
+	core = plat_my_core_pos();
+	proc_id = PLAT_PROC_START_ID + core;
 
-		/* Prevent interrupts from spuriously waking up this cpu */
-		k3_gic_cpuif_disable();
-		k3_gic_save_context();
-		clks_suspend();
+	/* Prevent interrupts from spuriously waking up this cpu */
+	k3_gic_cpuif_disable();
+	k3_gic_save_context();
+	clks_suspend();
 
-		if ((mode == 0) || (mode == 6)) {
-			INFO("Started Suspend Sequence in ATF\n");
-			/* Isolate the I/Os to allow I/O Daisy chain wakeup */
-			k3_lpm_set_io_isolation(true);
-			k3_lpm_config_magic_words(mode);
-			ti_sci_prepare_sleep(mode, context_save_addr, 0);
-			INFO("sent prepare message\n");
-			k3_config_wake_sources(true);
-			ti_sci_enter_sleep(proc_id, mode, am62l_sec_entrypoint);
-			ERROR("sent enter sleep message\n");
-		}
+	if ((mode == 0) || (mode == 6)) {
+		INFO("Started Suspend Sequence in ATF\n");
+		/* Isolate the I/Os to allow I/O Daisy chain wakeup */
+		k3_lpm_set_io_isolation(true);
+		k3_lpm_config_magic_words(mode);
+		ti_sci_prepare_sleep(mode, context_save_addr, 0);
+		INFO("sent prepare message\n");
+		k3_config_wake_sources(true);
+		ti_sci_enter_sleep(proc_id, mode, am62l_sec_entrypoint);
+		INFO("sent enter sleep message\n");
+	}
 
-		k3_suspend_to_ram(mode);
-	//}
+	k3_suspend_to_ram(mode);
 }
 
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
-{
-	//ERROR("\n finish : core power state = %d and cluster = %d\n",CORE_PWR_STATE(target_state),CLUSTER_PWR_STATE(target_state));	
-	if(CORE_PWR_STATE(target_state) == 15 /*&& CLUSTER_PWR_STATE(target_state) != 0*/){
+{	
+	/* Entering cluster standby sequence */
+	if(CORE_PWR_STATE(target_state) == 5 ){
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 		/* Restore PLL */
 		for(int i=0;i<10;i++){
@@ -442,37 +439,38 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 			mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) | (0x8000)));
 		}
 		return;
-	}
-		//ERROR("\n  here \n");
-	//if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){	
-		/* Remove the I/O isolation */
-		k3_lpm_set_io_isolation(false);
-		/* Initialize the console to provide early debug support */
-		k3_console_setup();
-		k3_config_wake_sources(false);
-		k3_gic_restore_context();
-		k3_gic_cpuif_enable();
-		ti_init_scmi_server();
-		k3_lpm_stub_copy_to_sram();
-		clks_resume();
-		//ERROR("\n  here \n");
-		/* 60 irqn = RTC */
-		gicv3_set_spi_routing(60, GICV3_IRM_ANY, 0);
-		gicv3_enable_interrupt(60, 0);
-		gicv3_set_interrupt_pending(60, 0);
-		plat_ic_raise_ns_sgi(60, 0);
-	//}
+	}	
+
+	/* Entering system suspend sequence */
+	/* Remove the I/O isolation */
+	k3_lpm_set_io_isolation(false);
+	/* Initialize the console to provide early debug support */
+	k3_console_setup();
+	k3_config_wake_sources(false);
+	k3_gic_restore_context();
+	k3_gic_cpuif_enable();
+	ti_init_scmi_server();
+	k3_lpm_stub_copy_to_sram();
+	clks_resume();
+	/* 60 irqn = RTC */
+	gicv3_set_spi_routing(60, GICV3_IRM_ANY, 0);
+	gicv3_enable_interrupt(60, 0);
+	gicv3_set_interrupt_pending(60, 0);
+	plat_ic_raise_ns_sgi(60, 0);
 }
 
 static void am62l_get_sys_suspend_power_state(psci_power_state_t *req_state)
 {
-	//ERROR("\n %s \n",__func__);
 	unsigned int i;
 
 	/* CPU & cluster off, system in retention */
 	for (i = MPIDR_AFFLVL0; i <= PLAT_MAX_PWR_LVL; i++) {
 		req_state->pwr_domain_state[i] = PLAT_MAX_OFF_STATE;
-	}
+		}
+		
+	#if PSCI_OS_INIT_MODE
+		req_state->last_at_pwrlvl = PLAT_MAX_PWR_LVL;
+	#endif
 }
 #endif
 
