@@ -454,12 +454,21 @@ __wkupsramsuspendentry void k3_lpm_stub_entry(uint32_t mode)
 		pll_save(&main_pll8);
 		lpm_seq_trace(0x1);
 
-		pll_disable(&main_pll8);
+		pll_save(&main_pll17);
 		lpm_seq_trace(0x2);
+
+		pll_disable(&main_pll8);
+		lpm_seq_trace(0x3);
+
+		pll_disable(&main_pll17);
+		lpm_seq_trace(0x4);
 	}
 	else if (mode == 12) {
 		pll_restore(&main_pll8);
-		lpm_seq_trace(0x3);
+		lpm_seq_trace(0x1);
+
+		pll_restore(&main_pll17);
+		lpm_seq_trace(0x2);
 	}
 	else  {
 		for (;;) {

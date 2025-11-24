@@ -18,6 +18,7 @@
 #include <lib/pmf/pmf.h>
 #include <lib/runtime_instr.h>
 #include <plat/common/platform.h>
+#include <lib/mmio.h>
 
 #include "psci_private.h"
 
@@ -260,7 +261,13 @@ exit:
 	write_scr_el3(scr | SCR_IRQ_BIT | SCR_FIQ_BIT);
 	isb();
 	dsb();
+
+	if(idx == 0)
+		mmio_write_32(0x00600090,0x2);
 	wfi();
+	if(idx == 0)
+		mmio_write_32(0x00600094,0x2);
+
 	write_scr_el3(scr);
 
 #if ENABLE_RUNTIME_INSTRUMENTATION

@@ -116,8 +116,8 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 
 	while ((psc_ptstat & (0x1 << pd_id)) != 0) {
 		if (((uint32_t)read_cntpct_el0() - tick_start) > timeout_ticks) {
-			ERROR("PSC timeout waiting for initial GOSTAT to clear for pd_id %d\n",
-			      pd_id);
+			ERROR("PSC timeout waiting for initial GOSTAT to clear for md_id %d and pd_id %d\n",
+			      md_id ,pd_id);
 			break;
 		}
 		psc_ptstat = mmio_read_32(MAIN_PSC_PTSTAT);
@@ -145,7 +145,7 @@ set_main_psc_state(uint32_t pd_id, uint32_t md_id, uint32_t pd_state, uint32_t m
 	// Wait loop with timeout
 	while ((psc_ptstat & (0x1 << pd_id)) != 0) {
 		if (((uint32_t)read_cntpct_el0() - tick_start) > timeout_ticks) {
-			ERROR("PSC timeout waiting for GOSTAT to clear for pd_id %d\n", pd_id);
+			ERROR("PSC timeout waiting for GOSTAT to clear for md_id %d and pd_id %d\n",md_id ,pd_id);
 			break;
 		}
 		psc_ptstat = mmio_read_32(MAIN_PSC_PTSTAT);
@@ -179,9 +179,26 @@ uintptr_t am62l_sec_entrypoint_glob;
 #define MAIN_PLL17_CTRL MAIN_PLL17_BASE + 0x20
 #define WKUP_MAIN_PLL0_HSDIVx(x)	WKUP_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
 
+#define LPSC_ADDR(lpsc_id) MAIN_PSC_MDSTAT_BASE + (4 * lpsc_id)
+#define PSC_ADDR(psc_id) MAIN_PSC_PDSTAT_BASE + (4 * psc_id)
+
 #define CLUSTER_SHALLOW_IDLE_STATE 0x3
 #define CLUSTER_DEEP_IDLE_STATE 0x4
 
+#define GPIO_DIR 0x00600088
+#define GPIO_SET_ADDR 0x00600090
+#define GPIO_CLR_ADDR 0x00600094
+#define GPIO_BIT      0x2
+
+#define PADCFG 0x040841c8
+
+unsigned int lpsc_idx[] = {1,2,7,9,11,13,25,26,28,29,30,33,39,41,45,46,47,49,50,51,52,53,55};
+unsigned int lpsc_ll_idx[] = {0,1,11,12,22};
+unsigned int lpsc_value[23];
+
+unsigned int psc_id_ll[] = {0,0,3,4,9};
+unsigned int psc_id_lp[] = {0,0,0,0,0,0,3,3,3,3,3,3,4,6,9,9,9,9,9,9,9,9,9};
+unsigned int psc_value[10];
 static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	// MAIN_PLL0
 	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
@@ -194,8 +211,15 @@ static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	//Need to do DDR in low FSP
 
 	// A53 running of Bypass clock
-	mmio_write_32(MAIN_PLL8_CTRL, mmio_read_32(MAIN_PLL8_CTRL) | 0x80000000);
+	mmio_write_32(MAIN_PLL8_CTRL, pll_hsdiv_val[12] | 0x80000000);
 
+	// LPSC
+	for(int i=0;i<4;i++){
+		if(psc_value[psc_id_ll[i]]!=0){
+			//ERROR("\n lpsc id = %d\n",lpsc_idx[lpsc_ll_idx[i]]);
+			set_main_psc_state(psc_id_ll[i],lpsc_idx[lpsc_ll_idx[i]],1,0);
+		}
+	}
 	return;
 }
 
@@ -216,12 +240,19 @@ static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 	k3_suspend_to_ram(11);
 
 	// MAIN PLL17 - disable
-	mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) & ~(0x00008000));
+	//mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) & ~(0x00008000));
 
 	// WKUP PLL - disable
-	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) & ~(0x8000)));
-	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) & ~(0x8000)));
+	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (pll_hsdiv_val[10] & ~(0x8000)));
+	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[11] & ~(0x8000)));
 
+	// LPSC
+	// for(int i=0;i<22;i++){
+	// 	if(psc_value[psc_id_lp[i]]!=0){
+	// 		//ERROR("\n lpsc id = %d\n",lpsc_idx[i]);
+	// 		set_main_psc_state(psc_id_lp[i],lpsc_idx[i],1,0);
+	// 	}
+	// }
 	return;
 }
 
@@ -340,7 +371,8 @@ static int am62l_validate_power_state(unsigned int power_state,
 	unsigned int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
 	unsigned int pstate = psci_get_pstate_type(power_state);
 	unsigned int core = plat_my_core_pos();
-
+	mmio_write_32(PADCFG,0x10007);
+	mmio_write_32(GPIO_DIR,0x0);
 	if (pwr_lvl > PLAT_MAX_PWR_LVL)
 		return PSCI_E_INVALID_PARAMS;
 
@@ -364,18 +396,34 @@ static int am62l_validate_power_state(unsigned int power_state,
 
 }
 
-uint32_t pll_hsdiv_val[10];
-
+uint32_t pll_hsdiv_val[13];
+bool last_saved = 0;
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
 	/* Entering cluster standby sequence */
 	if(CORE_PWR_STATE(target_state) == 5 ){
+		//unsigned int core = plat_my_core_pos();
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
+		if(!last_saved){
+			// pll value save
+			for(int i=0;i<10;i++){
+				pll_hsdiv_val[i] = mmio_read_32(MAIN_PLL0_HSDIVx(i));
+			}
+			pll_hsdiv_val[10] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3));
+			pll_hsdiv_val[11] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8));
+			pll_hsdiv_val[12] = mmio_read_32(MAIN_PLL8_CTRL);
 
-		for(int i=0;i<10;i++){
-			pll_hsdiv_val[i] = mmio_read_32(MAIN_PLL0_HSDIVx(i));
+			//lpsc value save
+			for(int i=0;i<23;i++){
+				lpsc_value[i] = mmio_read_32(LPSC_ADDR(lpsc_idx[i])) & 0x3U;
+				//ERROR("\n lpsc[%d] is %d \n",lpsc_idx[i],lpsc_value[i]);
+			}
+			for(int i=0;i<10;i++){
+				psc_value[i] = mmio_read_32(PSC_ADDR(i)) & 0x1U;
+			}
 		}
+		last_saved = 1;
 		if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){
 			low_latency_standby(pll_hsdiv_val);
 		}
@@ -419,25 +467,43 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 {	
 	/* Entering cluster standby sequence */
 	if(CORE_PWR_STATE(target_state) == 5 ){
+		//unsigned int core = plat_my_core_pos();
+		last_saved = 0;
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 		/* Restore PLL */
 		for(int i=0;i<10;i++){
 			mmio_write_32(MAIN_PLL0_HSDIVx(i), pll_hsdiv_val[i]);
 		}
+		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3),pll_hsdiv_val[10]);
+		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8),pll_hsdiv_val[11]);
+		mmio_write_32(MAIN_PLL8_CTRL,pll_hsdiv_val[12]);
 
 		if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){  // low latency standby
 		// MAIN_PLL8 - bypass disable
-			mmio_write_32(MAIN_PLL8_CTRL, mmio_read_32(MAIN_PLL8_CTRL) & ~(0x80000000));
+			//mmio_write_32(MAIN_PLL8_CTRL, mmio_read_32(MAIN_PLL8_CTRL) & ~(0x80000000));
+
+			// LPSC
+			//ERROR("\n resume\n");
+			for(int i=0;i<4;i++){
+				//ERROR("\n lpsc id = %d\n",lpsc_idx[lpsc_ll_idx[i]]);
+				set_main_psc_state(psc_id_ll[i],lpsc_idx[lpsc_ll_idx[i]],psc_value[psc_id_ll[i]],lpsc_value[lpsc_ll_idx[i]]);
+			}
 		}
 
 		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){ // low power standby
 			// Jumping to wkupsram to restore ARM PLL
 			k3_suspend_to_ram(12);
 			//MAIN PLL17 - enable
-			mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) | 0x0008000);
+			//mmio_write_32(MAIN_PLL17_CTRL, mmio_read_32(MAIN_PLL17_CTRL) | 0x0008000);
 			//WKUP PLL - enable
-			mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) | (0x8000)));
-			mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) | (0x8000)));
+			//mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) | (0x8000)));
+			//mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) | (0x8000)));
+			//LPSC
+			//ERROR("\n resume\n");
+			// for(int i=0;i<22;i++){
+			// //	ERROR("\n lpsc id = %d and value is %d\n",lpsc_idx[i],lpsc_value[lpsc_idx[i]]);
+			// 	set_main_psc_state(psc_id_lp[i],lpsc_idx[i],psc_value[psc_id_lp[i]],lpsc_value[i]);
+			// }
 		}
 		return;
 	}	
