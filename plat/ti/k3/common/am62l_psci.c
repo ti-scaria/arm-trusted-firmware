@@ -192,14 +192,15 @@ uintptr_t am62l_sec_entrypoint_glob;
 
 #define PADCFG 0x040841c8
 
-unsigned int lpsc_idx[] = {1,2,7,9,11,13,25,26,28,29,30,33,39,41,45,46,47,49,50,51,52,53,55};
-unsigned int lpsc_ll_idx[] = {0,1,11,12,22};
-unsigned int lpsc_value[23];
+unsigned int lpsc_idx[] = {1,2,/*7,9,*/11,26,25,/*28,29,*/30,33,39,/*41,*/45,46,47,49,50,51,52,53,55};
+unsigned int lpsc_ll_idx[] = {0,1,6,7,16};
+unsigned int lpsc_value[22];
 
 unsigned int psc_id_ll[] = {0,0,3,4,9};
-unsigned int psc_id_lp[] = {0,0,0,0,0,0,3,3,3,3,3,3,4,6,9,9,9,9,9,9,9,9,9};
+unsigned int psc_id_lp[] = {0,0,/*0,0,*/0,3,3,/*3,3,*/3,3,4,/*6,*/9,9,9,9,9,9,9,9,9};
 unsigned int psc_value[10];
 static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
+	//ERROR("\n Low latency\n");
 	// MAIN_PLL0
 	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
 	mmio_write_32(MAIN_PLL0_HSDIVx(5), (pll_hsdiv_val[5] & ~(0xff)) | 0x4);
@@ -222,7 +223,7 @@ static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	}
 	return;
 }
-
+static  int count = 0;
 static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 	// MAIN_PLL0
 	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
@@ -247,12 +248,17 @@ static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[11] & ~(0x8000)));
 
 	// LPSC
-	// for(int i=0;i<22;i++){
-	// 	if(psc_value[psc_id_lp[i]]!=0){
-	// 		//ERROR("\n lpsc id = %d\n",lpsc_idx[i]);
-	// 		set_main_psc_state(psc_id_lp[i],lpsc_idx[i],1,0);
-	// 	}
-	// }
+	count ++;
+	//if(count > 500){
+		//if(count == 501)
+			//ERROR("\n entered here ---------------------------------------\n");
+	for(int i=0;i<16;i++){
+		if(psc_value[psc_id_lp[i]]!=0){
+			//ERROR("\n lpsc id = %d\n",lpsc_idx[i]);
+			set_main_psc_state(psc_id_lp[i],lpsc_idx[i],1,2);
+		}
+	}
+//}
 	return;
 }
 
@@ -415,7 +421,7 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 			pll_hsdiv_val[12] = mmio_read_32(MAIN_PLL8_CTRL);
 
 			//lpsc value save
-			for(int i=0;i<23;i++){
+			for(int i=0;i<16;i++){
 				lpsc_value[i] = mmio_read_32(LPSC_ADDR(lpsc_idx[i])) & 0x3U;
 				//ERROR("\n lpsc[%d] is %d \n",lpsc_idx[i],lpsc_value[i]);
 			}
@@ -491,6 +497,14 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 		}
 
 		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){ // low power standby
+			//LPSC
+			//ERROR("\n resume\n");
+			//if(count > 500){
+			for(int i=0;i<16;i++){
+				//ERROR("\n lpsc id = %d and value is %d\n",lpsc_idx[i],lpsc_value[i]);
+				set_main_psc_state(psc_id_lp[i],lpsc_idx[i],psc_value[psc_id_lp[i]],lpsc_value[i]);
+			}
+		//}
 			// Jumping to wkupsram to restore ARM PLL
 			k3_suspend_to_ram(12);
 			//MAIN PLL17 - enable
@@ -498,16 +512,11 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 			//WKUP PLL - enable
 			//mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3)) | (0x8000)));
 			//mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8)) | (0x8000)));
-			//LPSC
-			//ERROR("\n resume\n");
-			// for(int i=0;i<22;i++){
-			// //	ERROR("\n lpsc id = %d and value is %d\n",lpsc_idx[i],lpsc_value[lpsc_idx[i]]);
-			// 	set_main_psc_state(psc_id_lp[i],lpsc_idx[i],psc_value[psc_id_lp[i]],lpsc_value[i]);
-			// }
+
 		}
 		return;
 	}	
-
+	//ERROR("\n entering here \n");
 	/* Entering system suspend sequence */
 	/* Remove the I/O isolation */
 	k3_lpm_set_io_isolation(false);
