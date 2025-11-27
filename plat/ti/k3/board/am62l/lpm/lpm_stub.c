@@ -183,7 +183,6 @@ __wkupsramfunc static int32_t save_and_disable_usb_lpsc(void)
 		psc_raw_pd_initiate(K3_MAIN_PSC_BASE, GP_CORE_CTL);
 		ret = psc_raw_pd_wait(K3_MAIN_PSC_BASE, GP_CORE_CTL);
 	}
-
 	return ret;
 }
 
@@ -216,7 +215,6 @@ __wkupsramfunc static int32_t restore_usb_lpsc(void)
 		psc_raw_pd_initiate(K3_MAIN_PSC_BASE, GP_CORE_CTL);
 		ret = psc_raw_pd_wait(K3_MAIN_PSC_BASE, GP_CORE_CTL);
 	}
-
 	return ret;
 }
 
@@ -462,8 +460,17 @@ __wkupsramsuspendentry void k3_lpm_stub_entry(uint32_t mode)
 
 		pll_disable(&main_pll17);
 		lpm_seq_trace(0x4);
+
+		if(save_and_disable_usb_lpsc()!=0){
+			ERROR("\n usb lpsc not disabled \n");
+		}
 	}
 	else if (mode == 12) {
+
+		if(restore_usb_lpsc()!=0){
+			ERROR("\n usb restore not done \n");
+		}
+
 		pll_restore(&main_pll8);
 		lpm_seq_trace(0x1);
 
