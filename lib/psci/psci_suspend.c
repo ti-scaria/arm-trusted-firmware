@@ -262,15 +262,15 @@ exit:
 	isb();
 	dsb();
 
-	if(idx == 0)
-		mmio_write_32(0x00600090,0x2);
-	else if(idx == 1)
-		mmio_write_32(0x00600090,0x1);
+	// if(idx == 0)
+	// 	mmio_write_32(0x00600090,0x2);
+	// else if(idx == 1)
+	// 	mmio_write_32(0x00600090,0x1);
 	wfi();
-	if(idx == 0)
-		mmio_write_32(0x00600094,0x2);
-	else if(idx == 1)
-		mmio_write_32(0x00600094,0x1);
+	// if(idx == 0)
+	// 	mmio_write_32(0x00600094,0x2);
+	// else if(idx == 1)
+	// 	mmio_write_32(0x00600094,0x1);
 
 	write_scr_el3(scr);
 

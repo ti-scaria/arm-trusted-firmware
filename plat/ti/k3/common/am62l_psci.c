@@ -195,11 +195,11 @@ uintptr_t am62l_sec_entrypoint_glob;
 
 unsigned int lpsc_idx[] = {1,2,/*7,9,*/11,26,25,28,29,30,33,39,/*41,*/45,46,47,49,50,51,52,53,55};
 unsigned int lpsc_ll_idx[] = {0,1,8,9,19};
-unsigned int lpsc_value[22];
+volatile unsigned int lpsc_value[22];
 
 unsigned int psc_id_ll[] = {0,0,3,4,9};
 unsigned int psc_id_lp[] = {0,0,/*0,0,*/0,3,3,3,3,3,3,4,/*6,*/9,9,9,9,9,9,9,9,9};
-unsigned int psc_value[10];
+volatile unsigned int psc_value[10];
 static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	//ERROR("\n Low latency\n");
 	// MAIN_PLL0
@@ -382,7 +382,8 @@ static int am62l_validate_power_state(unsigned int power_state,
 		}
 
 	} else if (pstate && PSTATE_TYPE_POWERDOWN) {
-		INFO("%s: (core %d): s2idle: power_state: 0x%x\n", __func__, core, power_state);
+		//mmio_write_32(0x00600090,0x2);
+		ERROR("%s: (core %d): s2idle: power_state: 0x%x\n", __func__, core, power_state);
 		CORE_PWR_STATE(req_state) = PLAT_MAX_OFF_STATE;
 		CLUSTER_PWR_STATE(req_state) = PLAT_MAX_OFF_STATE;
 		SYSTEM_PWR_STATE(req_state) = PLAT_MAX_OFF_STATE;
@@ -394,7 +395,7 @@ static int am62l_validate_power_state(unsigned int power_state,
 
 }
 
-uint32_t pll_hsdiv_val[13];
+volatile uint32_t pll_hsdiv_val[13];
 //bool last_saved = 0;
 uint32_t state_entered = 0;
 #ifdef K3_AM62L_LPM
