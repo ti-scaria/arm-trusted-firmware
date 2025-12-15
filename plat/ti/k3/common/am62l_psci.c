@@ -323,7 +323,7 @@ void am62l_redirect_interrupts(unsigned int from_cpu, unsigned int to_cpu)
 	for (id = 32; id < 1020; id++) {
 		/* Read current routing */
 		current_routing = mmio_read_64(gicd_base + GICD_IROUTER + (id * 8));
-
+		// ERROR("\n before current routing = %lu \n",current_routing);
 		/* Check if this interrupt is enabled and routed to from_cpu */
 		if ((current_routing & MPIDR_AFFINITY_MASK) == (aff_from & MPIDR_AFFINITY_MASK)) {
 			/* Save current routing for restoration */
@@ -334,6 +334,8 @@ void am62l_redirect_interrupts(unsigned int from_cpu, unsigned int to_cpu)
 
 				/* Redirect to to_cpu */
 				mmio_write_64(gicd_base + GICD_IROUTER + (id * 8), aff_to);
+				// current_routing = mmio_read_64(gicd_base + GICD_IROUTER + (id * 8));
+				// ERROR("\n after current routing = %lu \n",current_routing);
 				INFO("Redirected SPI %u from CPU%u to CPU%u\n", id, from_cpu, to_cpu);
 			} else {
 				WARN("Reached maximum number of redirected interrupts (%d)\n", MAX_REDIR_SPIS);
@@ -344,6 +346,7 @@ void am62l_redirect_interrupts(unsigned int from_cpu, unsigned int to_cpu)
 
 	/* Data barrier to ensure all writes are visible */
 	dsbsy();
+
 
 	INFO("Redirected %u SPIs from CPU%u to CPU%u\n", num_redirected, from_cpu, to_cpu);
 }
@@ -480,7 +483,7 @@ static void am62l_pwr_domain_off(const psci_power_state_t *target_state)
 {
 	//printf("\n Entered am62l_pwr_domain_off");
 	/* At very least the local core should be powering down */
-	while(whileone);
+	//while(whileone);
 	assert(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE);
 
 	/* Prevent interrupts from spuriously waking up this cpu */
@@ -598,7 +601,6 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 
 		if(!state_entered || state_entered < cluster_state){
 			unsigned int other_core = (core == 0) ? 1 : 0;
-			am62l_redirect_interrupts(core,other_core);
 			if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){
 				low_latency_standby(pll_hsdiv_val);
 			}
@@ -606,6 +608,7 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 				low_power_standby(pll_hsdiv_val);
 			}
 			state_entered = cluster_state;
+			am62l_redirect_interrupts(other_core,core);
 		}
 		
 		return;
