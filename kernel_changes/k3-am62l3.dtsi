@@ -1,0 +1,223 @@
+// SPDX-License-Identifier: GPL-2.0-only or MIT
+/*
+ * Device Tree file for the AM62L3 SoC family (Dual Core A53)
+ * Copyright (C) 2024 Texas Instruments Incorporated - https://www.ti.com/
+ *
+ * Technical Reference Manual: https://www.ti.com/lit/pdf/sprujb4
+ */
+
+/dts-v1/;
+
+#include "k3-am62l.dtsi"
+
+/ {
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu-map {
+			cluster0: cluster0 {
+				core0 {
+					cpu = <&cpu0>;
+				};
+
+				core1 {
+					cpu = <&cpu1>;
+				};
+			};
+		};
+
+		cpu0: cpu@0 {
+			compatible = "arm,cortex-a53";
+			reg = <0x000>;
+			device_type = "cpu";
+			enable-method = "psci";
+			i-cache-size = <0x8000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x8000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <128>;
+			next-level-cache = <&l2_0>;
+			operating-points-v2 = <&a53_opp_table>;
+			clocks = <&scmi_clk 356>;
+			power-domains = <&CPU_PD>;
+            power-domain-names = "psci";
+		};
+
+		cpu1: cpu@1 {
+			compatible = "arm,cortex-a53";
+			reg = <0x001>;
+			device_type = "cpu";
+			enable-method = "psci";
+			i-cache-size = <0x8000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x8000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <128>;
+			next-level-cache = <&l2_0>;
+			operating-points-v2 = <&a53_opp_table>;
+			clocks = <&scmi_clk 357>;
+            power-domains = <&CPU_PD>;
+            power-domain-names = "psci";
+
+		};
+
+        idle-states {
+                entry-method = "psci";
+
+                CPU_SLEEP_0: STBY {
+					compatible = "arm,idle-state";
+					idle-state-name = "Standby";
+					arm,psci-suspend-param = <0x00000001>;
+					entry-latency-us = <300>;
+					exit-latency-us = <600>;
+					min-residency-us = <1000>;
+					//local-timer-stop;
+                };
+
+				CPU_PWDOWN: CPUPWDOWN {
+					compatible = "arm,idle-state";
+					/* arm,psci-suspend-param = <0x2012233>; */
+					arm,psci-suspend-param = <0x012233>;
+					/* arm,psci-suspend-param = <0x00001>; */
+					entry-latency-us = <100000>;
+					exit-latency-us = <100000>;
+					min-residency-us = <1000000>;
+					local-timer-stop;
+				};
+
+        };
+
+	domain-idle-states {
+		cluster_sleep_0: cluster-sleep-0 {
+			compatible = "domain-idle-state";
+			arm,psci-suspend-param = <0x01000001>; /* cluster state */
+			entry-latency-us = <1000>;
+			exit-latency-us = <1000>;
+			min-residency-us = <3000>;
+			local-timer-stop;
+		};
+
+		cluster_sleep_1: cluster-sleep-1 {
+			compatible = "domain-idle-state";
+			arm,psci-suspend-param = <0x01000002>; /* system state */
+			entry-latency-us = <2000>;
+			exit-latency-us = <2000>;
+			min-residency-us = <10000>;
+			local-timer-stop;
+		};
+
+		main_sleep_00: main-deep-sleep {
+				compatible = "domain-idle-state";
+				arm,psci-suspend-param = <0x2012235>;
+				/* arm,psci-suspend-param = <0x3>; */
+				entry-latency-us = <200000>;
+				exit-latency-us = <500000>;
+				min-residency-us = <600000>;
+				local-timer-stop;
+		};
+
+		main_sleep_01: main-sleep-rtcddr {
+				compatible = "domain-idle-state";
+				arm,psci-suspend-param = <0x2012234>;
+				/* arm,psci-suspend-param = <0x1000001>; */
+				local-timer-stop;
+				entry-latency-us = <300000>;
+				exit-latency-us = <600000>;
+				min-residency-us = <1000000>;
+		};
+
+	};
+
+};
+
+	l2_0: l2-cache0 {
+		compatible = "cache";
+		cache-unified;
+		cache-level = <2>;
+		cache-size = <0x40000>;
+		cache-line-size = <64>;
+		cache-sets = <256>;
+	};
+
+	a53_opp_table: opp-table {
+		compatible = "operating-points-v2-ti-cpu";
+		opp-shared;
+		syscon = <&opp_efuse_table>;
+
+		opp-200000000 {
+			opp-hz = /bits/ 64 <200000000>;
+			opp-supported-hw = <0x01 0x0007>;
+			clock-latency-ns = <6000000>;
+		};
+
+		opp-400000000 {
+			opp-hz = /bits/ 64 <400000000>;
+			opp-supported-hw = <0x01 0x0007>;
+			clock-latency-ns = <6000000>;
+		};
+
+		opp-600000000 {
+			opp-hz = /bits/ 64 <600000000>;
+			opp-supported-hw = <0x01 0x0007>;
+			clock-latency-ns = <6000000>;
+		};
+
+		opp-800000000 {
+			opp-hz = /bits/ 64 <800000000>;
+			opp-supported-hw = <0x01 0x0007>;
+			clock-latency-ns = <6000000>;
+		};
+
+		opp-1000000000 {
+			opp-hz = /bits/ 64 <1000000000>;
+			opp-supported-hw = <0x01 0x0006>;
+			clock-latency-ns = <6000000>;
+		};
+
+		opp-1250000000 {
+			opp-hz = /bits/ 64 <1250000000>;
+			opp-supported-hw = <0x01 0x0003>;
+			clock-latency-ns = <6000000>;
+			opp-suspend;
+		};
+	};
+};
+
+&psci {
+        compatible = "arm,psci-1.0";
+        method = "smc";
+
+        // CPU_PD0: power-domain-cpu0 {
+        //         #power-domain-cells = <0>;
+        //         power-domains = <&CLSTER_PD>;
+        //         domain-idle-states = <&CPU_SLEEP_0>/* ,<&CPU_PWDOWN>/*, <&CPU_SLEEP_1>/* , <&CPU_SLEEP_MEM> */;
+
+        // };
+
+        // CPU_PD1: power-domain-cpu1 {
+        //         #power-domain-cells = <0>;
+        //         power-domains = <&CLSTER_PD>;
+        //         domain-idle-states = <&CPU_SLEEP_0>/* ,<&CPU_PWDOWN>/*, <&CPU_SLEEP_1>/* , <&CPU_SLEEP_MEM> */;
+        // };
+        CPU_PD: power-domain-cpu {
+                #power-domain-cells = <0>;
+                power-domains = <&CLSTER_PD>;
+                domain-idle-states = <&CPU_SLEEP_0> ,<&CPU_PWDOWN>/*, <&CPU_SLEEP_1>/* , <&CPU_SLEEP_MEM> */;
+
+        };
+
+        CLSTER_PD: power-domain-clster {
+                #power-domain-cells = <0>;
+				power-domains = <&MAIN_PD>;
+                domain-idle-states = <&cluster_sleep_0>, <&cluster_sleep_1>/*, <&cluster_sleep_2> */;
+		};
+
+        MAIN_PD: power-controller-main {
+                #power-domain-cells = <0>;
+                domain-idle-states = <&main_sleep_00>, <&main_sleep_01>;
+        };
+
+};
