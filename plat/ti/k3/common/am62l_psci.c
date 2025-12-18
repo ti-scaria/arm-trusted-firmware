@@ -255,133 +255,7 @@ static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 	return;
 }
 
-/* Maximum number of SPIs we can track for redirection */
-#define MAX_REDIR_SPIS           988
-
-/* GICv3 interrupt routing settings */
-#define IROUTER_IRM_SHIFT        31
-#define MPIDR_AFFLVL0_MASK       0xff
-
-/* Data structures to track redirected interrupts */
-static uint32_t redirected_interrupts[MAX_REDIR_SPIS];
-static uint64_t original_routing[MAX_REDIR_SPIS];
-static uint32_t num_redirected = 0;
-
-/* Track CPU idle states */
-static volatile uint32_t cpu_idle_state[2] = {0, 0};  // 0=active, 1=idle
-
-/**
- * Helper to convert MPIDR to GICv3 router value
- *
- * @mpidr: CPU MPIDR value
- * @irm: Routing mode (0=specific CPU, 1=any CPU in affinity)
- *
- * @return: 64-bit IROUTER value
- */
-static inline uint64_t am62l_irouter_val_from_mpidr(uint64_t mpidr,
-													unsigned int irm)
-{
-	return (mpidr & MPIDR_AFFINITY_MASK) |
-			((irm & IROUTER_IRM_MASK) << IROUTER_IRM_SHIFT);
-}
-
-/**
- * Redirect all interrupts from one CPU to another
- *
- * @from_cpu: Source CPU ID (0-based)
- * @to_cpu: Target CPU ID (0-based)
- *
- * This function redirects all SPI interrupts currently routed to from_cpu
- * to be handled by to_cpu instead. It saves the original configuration
- * for later restoration.
- */
-void am62l_redirect_interrupts(unsigned int from_cpu, unsigned int to_cpu)
-{
-	uintptr_t gicd_base = K3_GIC_BASE;
-	uint64_t mpidr_from, mpidr_to;
-	uint64_t aff_from, aff_to;
-	uint64_t current_routing;
-	unsigned int id;
-
-	/* Clear our tracking state */
-	num_redirected = 0;
-
-	/* Get MPIDR values for both CPUs */
-	mpidr_from = read_mpidr_el1() & ~MPIDR_AFFLVL0_MASK;
-	mpidr_from |= (from_cpu & 0xFF);
-
-	mpidr_to = read_mpidr_el1() & ~MPIDR_AFFLVL0_MASK;
-	mpidr_to |= (to_cpu & 0xFF);
-
-	/* Convert to affinity values for GIC */
-	aff_from = am62l_irouter_val_from_mpidr(mpidr_from, GICV3_IRM_PE);
-	aff_to = am62l_irouter_val_from_mpidr(mpidr_to, GICV3_IRM_PE);
-
-	INFO("Redirecting interrupts from CPU%u to CPU%u\n", from_cpu, to_cpu);
-
-	/* Scan through all SPIs (32-1019) */
-	for (id = 32; id < 1020; id++) {
-		/* Read current routing */
-		current_routing = mmio_read_64(gicd_base + GICD_IROUTER + (id * 8));
-		// ERROR("\n before current routing = %lu \n",current_routing);
-		/* Check if this interrupt is enabled and routed to from_cpu */
-		if ((current_routing & MPIDR_AFFINITY_MASK) == (aff_from & MPIDR_AFFINITY_MASK)) {
-			/* Save current routing for restoration */
-			if (num_redirected < MAX_REDIR_SPIS) {
-				redirected_interrupts[num_redirected] = id;
-				original_routing[num_redirected] = current_routing;
-				num_redirected++;
-
-				/* Redirect to to_cpu */
-				mmio_write_64(gicd_base + GICD_IROUTER + (id * 8), aff_to);
-				// current_routing = mmio_read_64(gicd_base + GICD_IROUTER + (id * 8));
-				// ERROR("\n after current routing = %lu \n",current_routing);
-				INFO("Redirected SPI %u from CPU%u to CPU%u\n", id, from_cpu, to_cpu);
-			} else {
-				WARN("Reached maximum number of redirected interrupts (%d)\n", MAX_REDIR_SPIS);
-				break;
-			}
-		}
-	}
-
-	/* Data barrier to ensure all writes are visible */
-	dsbsy();
-
-
-	INFO("Redirected %u SPIs from CPU%u to CPU%u\n", num_redirected, from_cpu, to_cpu);
-}
-
-/**
- * Restore original interrupt routing
- *
- * Restores all interrupt routing to their original configuration
- * before redirection.
- */
-void am62l_restore_interrupts(void)
-{
-	uintptr_t gicd_base = K3_GIC_BASE;
-	unsigned int i;
-
-	INFO("Restoring original interrupt routing for %u SPIs\n", num_redirected);
-
-	for (i = 0; i < num_redirected; i++) {
-		uint32_t id = redirected_interrupts[i];
-		uint64_t routing = original_routing[i];
-
-		/* Restore original routing */
-		mmio_write_64(gicd_base + GICD_IROUTER + (id * 8), routing);
-		INFO("Restored routing for SPI %u\n", id);
-	}
-
-	/* Reset counter */
-	num_redirected = 0;
-
-	/* Data barrier to ensure all writes are visible */
-	dsbsy();
-
-	INFO("All interrupt routing restored\n");
-}
-
+uint32_t state_entered = 0;
 static void am62l_cpu_standby(plat_local_state_t cpu_state)
 {
 	u_register_t scr;
@@ -396,6 +270,19 @@ static void am62l_cpu_standby(plat_local_state_t cpu_state)
 	wfi();
 	/* Restore SCR */
 	write_scr_el3(scr);
+	//udelay(1000);
+	if(state_entered!=0){
+		unsigned int other_cpu;
+		/* Calculate the other CPU ID (assuming a 2-CPU system) */
+		other_cpu = (plat_my_core_pos() == 0) ? 1 : 0;
+		/* Send SGI #15 to the other CPU to wake it up */
+		plat_ic_raise_el3_sgi(15, other_cpu);
+
+		/* Memory barrier after sending SGI */
+		dsbsy();
+		isb();
+	}
+
 }
 
 static int __maybe_unused am62l_loc_pwr_on(int core) {
@@ -573,14 +460,14 @@ static int am62l_validate_power_state(unsigned int power_state,
 
 volatile uint32_t pll_hsdiv_val[13];
 //bool last_saved = 0;
-uint32_t state_entered = 0;
+
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
 	/* Entering cluster standby sequence */
 	if(CORE_PWR_STATE(target_state) == 5 ){
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
-		unsigned int core = plat_my_core_pos();
+		//unsigned int core = plat_my_core_pos();
 		if(!state_entered){
 			// pll value save
 			for(int i=0;i<10;i++){
@@ -600,7 +487,7 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		}
 
 		if(!state_entered || state_entered < cluster_state){
-			unsigned int other_core = (core == 0) ? 1 : 0;
+			//unsigned int other_core = (core == 0) ? 1 : 0;
 			if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){
 				low_latency_standby(pll_hsdiv_val);
 			}
@@ -608,7 +495,6 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 				low_power_standby(pll_hsdiv_val);
 			}
 			state_entered = cluster_state;
-			am62l_redirect_interrupts(other_core,core);
 		}
 		
 		return;
@@ -703,8 +589,8 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 			// Jumping to wkupsram to restore ARM PLL
 			k3_suspend_to_ram(12);
 		}
-		am62l_restore_interrupts();
 		state_entered = 0;
+
 		return;
 	}	
 	/* Remove the I/O isolation */
