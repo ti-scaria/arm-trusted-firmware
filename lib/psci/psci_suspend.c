@@ -155,7 +155,7 @@ int psci_cpu_suspend_start(unsigned int idx,
 		skip_wfi = true;
 		goto exit;
 	}
-
+///ERROR("\n issue is after this \n");
 #if PSCI_OS_INIT_MODE
 	if (psci_suspend_mode == OS_INIT) {
 		/*
@@ -178,7 +178,7 @@ int psci_cpu_suspend_start(unsigned int idx,
 #if PSCI_OS_INIT_MODE
 	}
 #endif
-
+// ERROR("\n reaching here \n");
 #if PSCI_OS_INIT_MODE
 	if (psci_plat_pm_ops->pwr_domain_validate_suspend != NULL) {
 		rc = psci_plat_pm_ops->pwr_domain_validate_suspend(state_info);

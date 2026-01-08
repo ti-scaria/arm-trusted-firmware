@@ -184,14 +184,19 @@ uintptr_t am62l_sec_entrypoint_glob;
 #define LPSC_ADDR(lpsc_id) MAIN_PSC_MDSTAT_BASE + (4 * lpsc_id)
 #define PSC_ADDR(psc_id) MAIN_PSC_PDSTAT_BASE + (4 * psc_id)
 
-#define CLUSTER_SHALLOW_IDLE_STATE 0x3
-#define CLUSTER_DEEP_IDLE_STATE 0x4
+#define CORE_IDLE_STATE 0x3
+#define CLUSTER_SHALLOW_IDLE_STATE 0x1
+#define CLUSTER_DEEP_IDLE_STATE 0x2
 
 #define GPIO_DIR 0x00600088
-#define GPIO_SET_ADDR 0x00600090
-#define GPIO_CLR_ADDR 0x00600094
-#define GPIO_BIT      0x2
+#define GPIO_DIR_2 0x00600060
+#define GPIO_SET_ADDR 0x00600068
+#define GPIO_CLR_ADDR 0x0060006c
+#define GPIO_BIT      0x80000000
+#define GPIO_BIT_2      0x40000000
 
+#define PADCFG_RX2 0x040841bc
+#define PADCFG_TX2 0x040841c0
 #define PADCFG_TX 0x040841c4
 #define PADCFG_RX 0x040841c8
 
@@ -203,6 +208,7 @@ unsigned int psc_id_ll[] = {0,0,3,4,9};
 unsigned int psc_id_lp[] = {0,0,/*0,0,*/0,3,3,3,3,3,3,4,/*6,*/9,9,9,9,9,9,9,9,9};
 volatile unsigned int psc_value[10];
 static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
+
 	//ERROR("\n Low latency\n");
 	// MAIN_PLL0
 	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
@@ -259,6 +265,8 @@ uint32_t state_entered = 0;
 static void am62l_cpu_standby(plat_local_state_t cpu_state)
 {
 	u_register_t scr;
+	int core;
+	core = plat_my_core_pos();
 
 	scr = read_scr_el3();
 	/* Enable the Non secure interrupt to wake the CPU */
@@ -267,21 +275,31 @@ static void am62l_cpu_standby(plat_local_state_t cpu_state)
 	/* dsb is good practice before using wfi to enter low power states */
 	dsb();
 	/* Enter standby state */
+	if(core == 0)
+		mmio_write_32(GPIO_SET_ADDR,GPIO_BIT);
+	else 
+		mmio_write_32(GPIO_SET_ADDR,GPIO_BIT_2);
 	wfi();
+	//udelay(1000);
+	if(core == 0)
+		mmio_write_32(GPIO_CLR_ADDR,GPIO_BIT);
+	else 
+		mmio_write_32(GPIO_CLR_ADDR,GPIO_BIT_2);	
+
 	/* Restore SCR */
 	write_scr_el3(scr);
 	//udelay(1000);
-	if(state_entered!=0){
+	//if(state_entered!=0){
 		unsigned int other_cpu;
-		/* Calculate the other CPU ID (assuming a 2-CPU system) */
+		/* Calculate the other CPU ID */
 		other_cpu = (plat_my_core_pos() == 0) ? 1 : 0;
 		/* Send SGI #15 to the other CPU to wake it up */
 		plat_ic_raise_el3_sgi(15, other_cpu);
-
 		/* Memory barrier after sending SGI */
 		dsbsy();
 		isb();
-	}
+		udelay(100);
+	//}
 
 }
 
@@ -424,15 +442,18 @@ static int am62l_validate_power_state(unsigned int power_state,
 	unsigned int core = plat_my_core_pos();
 	mmio_write_32(PADCFG_RX,0x10007);
 	mmio_write_32(PADCFG_TX,0x10007);
+	mmio_write_32(PADCFG_TX2,0x10007);
+	mmio_write_32(PADCFG_RX2,0x10007);
 	mmio_write_32(GPIO_DIR,0x0);
+	mmio_write_32(GPIO_DIR_2,0x0);
 	if (pwr_lvl > PLAT_MAX_PWR_LVL)
 		return PSCI_E_INVALID_PARAMS;
 
 	if (pstate == PSTATE_TYPE_STANDBY) {
-		CORE_PWR_STATE(req_state) = 5;
+		CORE_PWR_STATE(req_state) = CORE_IDLE_STATE;
 
 		if(pwr_lvl >= MPIDR_AFFLVL1) {
-			CLUSTER_PWR_STATE(req_state) = (power_state & 0x7U) + 2;
+			CLUSTER_PWR_STATE(req_state) = (power_state & 0x7U);
 		}
 
 	} else if (pstate && PSTATE_TYPE_POWERDOWN) {
@@ -465,7 +486,8 @@ volatile uint32_t pll_hsdiv_val[13];
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
 	/* Entering cluster standby sequence */
-	if(CORE_PWR_STATE(target_state) == 5 ){
+		// if(CLUSTER_PWR_STATE(target_state) == CLUSTER_SHALLOW_IDLE_STATE || CLUSTER_PWR_STATE(target_state) == CLUSTER_DEEP_IDLE_STATE ){
+	if(CORE_PWR_STATE(target_state) == CORE_IDLE_STATE ){
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 		//unsigned int core = plat_my_core_pos();
 		if(!state_entered){
@@ -558,7 +580,8 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {	
 	/* Entering cluster standby sequence */
-	if(CORE_PWR_STATE(target_state) == 5 ){
+	// if(CLUSTER_PWR_STATE(target_state) == CLUSTER_SHALLOW_IDLE_STATE || CLUSTER_PWR_STATE(target_state) == CLUSTER_DEEP_IDLE_STATE ){
+	if(CORE_PWR_STATE(target_state) == CORE_IDLE_STATE ){
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 		if(state_entered != cluster_state)
 			return;
