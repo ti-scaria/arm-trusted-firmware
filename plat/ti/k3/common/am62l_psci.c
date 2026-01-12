@@ -265,8 +265,8 @@ uint32_t state_entered = 0;
 static void am62l_cpu_standby(plat_local_state_t cpu_state)
 {
 	u_register_t scr;
-	int core;
-	core = plat_my_core_pos();
+	// int core;
+	// core = plat_my_core_pos();
 
 	scr = read_scr_el3();
 	/* Enable the Non secure interrupt to wake the CPU */
@@ -275,30 +275,30 @@ static void am62l_cpu_standby(plat_local_state_t cpu_state)
 	/* dsb is good practice before using wfi to enter low power states */
 	dsb();
 	/* Enter standby state */
-	if(core == 0)
-		mmio_write_32(GPIO_SET_ADDR,GPIO_BIT);
-	else 
-		mmio_write_32(GPIO_SET_ADDR,GPIO_BIT_2);
+	// if(core == 0)
+	// 	mmio_write_32(GPIO_SET_ADDR,GPIO_BIT);
+	// else 
+	// 	mmio_write_32(GPIO_SET_ADDR,GPIO_BIT_2);
 	wfi();
 	//udelay(1000);
-	if(core == 0)
-		mmio_write_32(GPIO_CLR_ADDR,GPIO_BIT);
-	else 
-		mmio_write_32(GPIO_CLR_ADDR,GPIO_BIT_2);	
+	// if(core == 0)
+	// 	mmio_write_32(GPIO_CLR_ADDR,GPIO_BIT);
+	// else 
+	// 	mmio_write_32(GPIO_CLR_ADDR,GPIO_BIT_2);	
 
 	/* Restore SCR */
 	write_scr_el3(scr);
 	//udelay(1000);
 	//if(state_entered!=0){
-		unsigned int other_cpu;
-		/* Calculate the other CPU ID */
-		other_cpu = (plat_my_core_pos() == 0) ? 1 : 0;
-		/* Send SGI #15 to the other CPU to wake it up */
-		plat_ic_raise_el3_sgi(15, other_cpu);
-		/* Memory barrier after sending SGI */
-		dsbsy();
-		isb();
-		udelay(100);
+		// unsigned int other_cpu;
+		// /* Calculate the other CPU ID */
+		// other_cpu = (plat_my_core_pos() == 0) ? 1 : 0;
+		// /* Send SGI #15 to the other CPU to wake it up */
+		// plat_ic_raise_el3_sgi(15, other_cpu);
+		// /* Memory barrier after sending SGI */
+		// dsbsy();
+		// isb();
+		// udelay(100);
 	//}
 
 }
@@ -608,7 +608,8 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 				if(psc_value[psc_id_ll[i]]!=0 && lpsc_value[lpsc_ll_idx[i]]!=0){
 				set_main_psc_state(psc_id_ll[i],lpsc_idx[lpsc_ll_idx[i]],psc_value[psc_id_ll[i]],lpsc_value[lpsc_ll_idx[i]]);
 				}
-			}			
+			}	
+					
 			// Jumping to wkupsram to restore ARM PLL
 			k3_suspend_to_ram(12);
 		}
