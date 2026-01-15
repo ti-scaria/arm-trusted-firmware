@@ -464,8 +464,58 @@ __wkupsramsuspendentry void k3_lpm_stub_entry(uint32_t mode)
 		if(save_and_disable_usb_lpsc()!=0){
 			ERROR("\n usb lpsc not disabled \n");
 		}
+
+		// put_ddr_in_sr(true);
+		// lpm_seq_trace(0x5);
+
+		// u_register_t scr;
+		// scr = read_scr_el3();
+		// write_scr_el3(scr | SCR_IRQ_BIT | SCR_FIQ_BIT);
+		// isb();
+		// dsb();
+		// wfi();
+		// write_scr_el3(scr);
+		// if (save_ddr_reg_configs() != 0) {
+		// 	lpm_seq_trace_fail(0x5);
+		// 	lpm_abort();
+		// } else {
+		// 	lpm_seq_trace(0x5);
+		// }
+		// /*	Disable the LPSCs for DDR */ 
+		// if (disable_ddr_lpsc() != 0) {
+		// 	lpm_seq_trace_fail(0x4);
+		// 	lpm_abort();
+		// } else {
+		// 	lpm_seq_trace(0x4);
+		// }
+		// put_ddr_in_sr(false);
+		// lpm_seq_trace(0x6);
+
+		// if(restore_usb_lpsc()!=0){
+		// 	ERROR("\n usb restore not done \n");
+		// }
+
+		// pll_restore(&main_pll8);
+		// lpm_seq_trace(0x1);
+
+		// pll_restore(&main_pll17);
+		// lpm_seq_trace(0x2);
+		
 	}
 	else if (mode == 12) {
+
+		// if (enable_ddr_lpsc() != 0) {
+		// 	lpm_seq_trace_fail(0xC);
+		// 	lpm_abort();
+		// } else {
+		// 	lpm_seq_trace(0xC);
+		// }
+		// if (restore_ddr_reg_configs() != 0) {
+		// 	lpm_seq_trace_fail(0x0);
+		// 	lpm_abort();
+		// } else {
+		// 	lpm_seq_trace(0x0);
+		// }
 
 		if(restore_usb_lpsc()!=0){
 			ERROR("\n usb restore not done \n");

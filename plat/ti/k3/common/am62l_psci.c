@@ -200,13 +200,14 @@ uintptr_t am62l_sec_entrypoint_glob;
 #define PADCFG_TX 0x040841c4
 #define PADCFG_RX 0x040841c8
 
-unsigned int lpsc_idx[] = {1,2,/*7,9,*/11,26,25,28,29,30,33,39,/*41,*/45,46,47,49,50,51,52,53,55};
-unsigned int lpsc_ll_idx[] = {0,1,8,9,19};
-volatile unsigned int lpsc_value[22];
+#define LPSC_COUNT 15
+unsigned int lpsc_id[] = {1,2,33,39,55,11,26,25,/*28,29,30,41,*/45,46,47,49,50,51,53};
+volatile unsigned int lpsc_value[LPSC_COUNT];
 
-unsigned int psc_id_ll[] = {0,0,3,4,9};
-unsigned int psc_id_lp[] = {0,0,/*0,0,*/0,3,3,3,3,3,3,4,/*6,*/9,9,9,9,9,9,9,9,9};
+unsigned int psc_id[] = {0,0,3,4,9,0,3,3,/*3,3,3,6,*/9,9,9,9,9,9,9};
 volatile unsigned int psc_value[10];
+
+static int wait=0;
 static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 
 	//ERROR("\n Low latency\n");
@@ -225,13 +226,23 @@ static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 
 	// LPSC
 	for(int i=0;i<5;i++){
-		if(psc_value[psc_id_ll[i]]!=0 && lpsc_value[lpsc_ll_idx[i]]!=0){
-			set_main_psc_state(psc_id_ll[i],lpsc_idx[lpsc_ll_idx[i]],1,2);
+		if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
+			set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],1,2);
 		}
 	}
+
+	//DDR AUTO SELF REFRESH
+	mmio_write_32(0x0F3082A0,0x0000ff07);
+	mmio_write_32(0x0F3082A4,0x0F0F00FF);
+	mmio_write_32(0x0F30829C,0x07074007);
+
+	// AUTO CLOCK GATING
+	mmio_write_32(0x43054050,0);
+
 	return;
 }
 static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
+
 	// MAIN_PLL0
 	mmio_write_32(MAIN_PLL0_HSDIVx(0), (pll_hsdiv_val[0] & ~(0xff)) | 0xf);
 	mmio_write_32(MAIN_PLL0_HSDIVx(3), (pll_hsdiv_val[3] & ~(0x8000)));
@@ -242,22 +253,20 @@ static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 	mmio_write_32(MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[8] & ~(0x8000)));
 	mmio_write_32(MAIN_PLL0_HSDIVx(9), (pll_hsdiv_val[9] & ~(0x8000)));
 
-	//Need to do DDR in Self Refresh
-
-	// Jumping to wkupsram to disable ARM PLL
-	k3_suspend_to_ram(11);
+	//Need to do DDR in Self Refresh	
 
 	// WKUP PLL - disable
 	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (pll_hsdiv_val[10] & ~(0x8000)));
 	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[11] & ~(0x8000)));
 
 	// LPSC
-	for(int i=0;i<5;i++){
-		if(psc_value[psc_id_ll[i]]!=0 && lpsc_value[lpsc_ll_idx[i]]!=0){
-			set_main_psc_state(psc_id_ll[i],lpsc_idx[lpsc_ll_idx[i]],1,2);
+	for(int i=0;i<LPSC_COUNT;i++){
+		if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
+			set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],1,2);
 		}
 	}
-
+	// Jumping to wkupsram to disable ARM PLL
+	k3_suspend_to_ram(11);
 	return;
 }
 
@@ -479,12 +488,23 @@ static int am62l_validate_power_state(unsigned int power_state,
 
 }
 
+// Storing PLL HSDIVs values
 volatile uint32_t pll_hsdiv_val[13];
-//bool last_saved = 0;
+/*
+[0-9] - PLL0 HSDIV [0-9]
+[10-11] - WKUP PLL HSDIV [3 & 8]
+[12] - PLL 8 HSDIV  
+*/
+
 
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
+	if(wait<500){
+		wait++;
+		return;
+	}
+	else wait = 501;
 	/* Entering cluster standby sequence */
 		// if(CLUSTER_PWR_STATE(target_state) == CLUSTER_SHALLOW_IDLE_STATE || CLUSTER_PWR_STATE(target_state) == CLUSTER_DEEP_IDLE_STATE ){
 	if(CORE_PWR_STATE(target_state) == CORE_IDLE_STATE ){
@@ -500,8 +520,8 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 			pll_hsdiv_val[12] = mmio_read_32(MAIN_PLL8_CTRL);
 
 			//lpsc value save
-			for(int i=0;i<18;i++){
-				lpsc_value[i] = mmio_read_32(LPSC_ADDR(lpsc_idx[i])) & 0x3U;
+			for(int i=0;i<LPSC_COUNT;i++){
+				lpsc_value[i] = mmio_read_32(LPSC_ADDR(lpsc_id[i])) & 0x3U;
 			}
 			for(int i=0;i<10;i++){
 				psc_value[i] = mmio_read_32(PSC_ADDR(i)) & 0x1U;
@@ -509,14 +529,15 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		}
 
 		if(!state_entered || state_entered < cluster_state){
-			//unsigned int other_core = (core == 0) ? 1 : 0;
+
+			state_entered = cluster_state;
 			if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){
 				low_latency_standby(pll_hsdiv_val);
 			}
 			else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){
 				low_power_standby(pll_hsdiv_val);
 			}
-			state_entered = cluster_state;
+			
 		}
 		
 		return;
@@ -579,12 +600,47 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {	
+	if(wait<501){
+		return;
+	}
 	/* Entering cluster standby sequence */
 	// if(CLUSTER_PWR_STATE(target_state) == CLUSTER_SHALLOW_IDLE_STATE || CLUSTER_PWR_STATE(target_state) == CLUSTER_DEEP_IDLE_STATE ){
 	if(CORE_PWR_STATE(target_state) == CORE_IDLE_STATE ){
 		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
 		if(state_entered != cluster_state)
 			return;
+
+
+		if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){  // low latency standby
+
+			// AUTO CLOCK GATING OFF
+			mmio_write_32(0x43054050,0xe);
+
+			// DDR AUTO REFRESH OFF
+			mmio_write_32(0x0F3082A0,0x0);
+			mmio_write_32(0x0F3082A4,0x0);
+			mmio_write_32(0x0F30829C,0x00004007);
+			// LPSC
+			for(int i=0;i<5;i++){
+				if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
+				set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],psc_value[psc_id[i]],lpsc_value[lpsc_id[i]]);
+				}
+			}
+
+		}
+
+		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){ // low power standby
+			//LPSC
+			// Jumping to wkupsram to restore ARM PLL
+			k3_suspend_to_ram(12);
+			for(int i=0;i<LPSC_COUNT;i++){
+				if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
+				set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],psc_value[psc_id[i]],lpsc_value[lpsc_id[i]]);
+				}
+			}	
+					
+
+		}
 		/* Restore PLL */
 		for(int i=0;i<10;i++){
 			mmio_write_32(MAIN_PLL0_HSDIVx(i), pll_hsdiv_val[i]);
@@ -592,27 +648,6 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3),pll_hsdiv_val[10]);
 		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8),pll_hsdiv_val[11]);
 		mmio_write_32(MAIN_PLL8_CTRL,pll_hsdiv_val[12]);
-
-		if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){  // low latency standby
-			// LPSC
-			for(int i=0;i<5;i++){
-				if(psc_value[psc_id_ll[i]]!=0 && lpsc_value[lpsc_ll_idx[i]]!=0){
-				set_main_psc_state(psc_id_ll[i],lpsc_idx[lpsc_ll_idx[i]],psc_value[psc_id_ll[i]],lpsc_value[lpsc_ll_idx[i]]);
-				}
-			}
-		}
-
-		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){ // low power standby
-			//LPSC
-			for(int i=0;i<5;i++){
-				if(psc_value[psc_id_ll[i]]!=0 && lpsc_value[lpsc_ll_idx[i]]!=0){
-				set_main_psc_state(psc_id_ll[i],lpsc_idx[lpsc_ll_idx[i]],psc_value[psc_id_ll[i]],lpsc_value[lpsc_ll_idx[i]]);
-				}
-			}	
-					
-			// Jumping to wkupsram to restore ARM PLL
-			k3_suspend_to_ram(12);
-		}
 		state_entered = 0;
 
 		return;
