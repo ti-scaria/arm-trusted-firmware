@@ -207,7 +207,7 @@ volatile unsigned int lpsc_value[LPSC_COUNT];
 unsigned int psc_id[] = {0,0,3,4,9,0,3,3,/*3,3,3,6,*/9,9,9,9,9,9,9};
 volatile unsigned int psc_value[10];
 
-static int wait=0;
+// static int wait=0;
 static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 
 	//ERROR("\n Low latency\n");
@@ -270,7 +270,7 @@ static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 	return;
 }
 
-uint32_t state_entered = 0;
+uint32_t state_entered[2] = {0,0};
 static void am62l_cpu_standby(plat_local_state_t cpu_state)
 {
 	u_register_t scr;
@@ -298,7 +298,7 @@ static void am62l_cpu_standby(plat_local_state_t cpu_state)
 	/* Restore SCR */
 	write_scr_el3(scr);
 	//udelay(1000);
-	//if(state_entered!=0){
+	//if(state_entered[core]!=0){
 		// unsigned int other_cpu;
 		// /* Calculate the other CPU ID */
 		// other_cpu = (plat_my_core_pos() == 0) ? 1 : 0;
@@ -500,17 +500,18 @@ volatile uint32_t pll_hsdiv_val[13];
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
-	if(wait<500){
-		wait++;
-		return;
-	}
-	else wait = 501;
+	// if(wait<500){
+	// 	wait++;
+	// 	return;
+	// }
+	// else wait = 501;
 	/* Entering cluster standby sequence */
 		// if(CLUSTER_PWR_STATE(target_state) == CLUSTER_SHALLOW_IDLE_STATE || CLUSTER_PWR_STATE(target_state) == CLUSTER_DEEP_IDLE_STATE ){
 	if(CORE_PWR_STATE(target_state) == CORE_IDLE_STATE ){
-		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
-		//unsigned int core = plat_my_core_pos();
-		if(!state_entered){
+		// uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
+		unsigned int core = plat_my_core_pos();
+		uint32_t in_standby = (state_entered[0] > state_entered[1] ? state_entered[0] : state_entered[1]);
+		if(!in_standby){
 			// pll value save
 			for(int i=0;i<10;i++){
 				pll_hsdiv_val[i] = mmio_read_32(MAIN_PLL0_HSDIVx(i));
@@ -527,14 +528,14 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 				psc_value[i] = mmio_read_32(PSC_ADDR(i)) & 0x1U;
 			}
 		}
+		
+		state_entered[core] = CLUSTER_PWR_STATE(target_state);
 
-		if(!state_entered || state_entered < cluster_state){
-
-			state_entered = cluster_state;
-			if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){
+		if(!in_standby || in_standby < state_entered[core]){
+			if(state_entered[core] == CLUSTER_SHALLOW_IDLE_STATE){
 				low_latency_standby(pll_hsdiv_val);
 			}
-			else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){
+			else if(state_entered[core] == CLUSTER_DEEP_IDLE_STATE){
 				low_power_standby(pll_hsdiv_val);
 			}
 			
@@ -600,18 +601,19 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {	
-	if(wait<501){
-		return;
-	}
+	// if(wait<501){
+	// 	return;
+	// }
 	/* Entering cluster standby sequence */
 	// if(CLUSTER_PWR_STATE(target_state) == CLUSTER_SHALLOW_IDLE_STATE || CLUSTER_PWR_STATE(target_state) == CLUSTER_DEEP_IDLE_STATE ){
 	if(CORE_PWR_STATE(target_state) == CORE_IDLE_STATE ){
-		uint32_t cluster_state = CLUSTER_PWR_STATE(target_state);
-		if(state_entered != cluster_state)
+		unsigned int core = plat_my_core_pos();
+		if(state_entered[core] <= state_entered[1-core]){
+			state_entered[core] = 0;
 			return;
+		}
 
-
-		if(cluster_state == CLUSTER_SHALLOW_IDLE_STATE){  // low latency standby
+		if(state_entered[core] == CLUSTER_SHALLOW_IDLE_STATE){  // low latency standby
 
 			// AUTO CLOCK GATING OFF
 			mmio_write_32(0x43054050,0xe);
@@ -629,7 +631,7 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 
 		}
 
-		else if(cluster_state == CLUSTER_DEEP_IDLE_STATE){ // low power standby
+		else if(state_entered[core] == CLUSTER_DEEP_IDLE_STATE){ // low power standby
 			//LPSC
 			// Jumping to wkupsram to restore ARM PLL
 			k3_suspend_to_ram(12);
@@ -648,7 +650,9 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3),pll_hsdiv_val[10]);
 		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8),pll_hsdiv_val[11]);
 		mmio_write_32(MAIN_PLL8_CTRL,pll_hsdiv_val[12]);
-		state_entered = 0;
+
+		state_entered[core] = 0;
+		state_entered[1-core] = 0;
 
 		return;
 	}	
