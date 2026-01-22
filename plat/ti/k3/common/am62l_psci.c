@@ -297,18 +297,8 @@ static void am62l_cpu_standby(plat_local_state_t cpu_state)
 
 	/* Restore SCR */
 	write_scr_el3(scr);
-	//udelay(1000);
-	//if(state_entered[core]!=0){
-		// unsigned int other_cpu;
-		// /* Calculate the other CPU ID */
-		// other_cpu = (plat_my_core_pos() == 0) ? 1 : 0;
-		// /* Send SGI #15 to the other CPU to wake it up */
-		// plat_ic_raise_el3_sgi(15, other_cpu);
-		// /* Memory barrier after sending SGI */
-		// dsbsy();
-		// isb();
-		// udelay(100);
-	//}
+
+
 
 }
 
