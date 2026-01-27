@@ -220,7 +220,7 @@ static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	mmio_write_32(MAIN_PLL0_HSDIVx(9), (pll_hsdiv_val[9] & ~(0x8000)));
 
 	// A53 running of Bypass clock
-	mmio_write_32(MAIN_PLL8_CTRL, pll_hsdiv_val[12] | 0x80000000);
+	mmio_write_32(MAIN_PLL8_CTRL, pll_hsdiv_val[10] | 0x80000000);
 
 	// LPSC
 	for(int i=0;i<5;i++){
@@ -486,8 +486,8 @@ static int am62l_validate_power_state(unsigned int power_state,
 volatile uint32_t pll_hsdiv_val[13];
 /*
 [0-9] - PLL0 HSDIV [0-9]
-[10-11] - WKUP PLL HSDIV [3 & 8]
-[12] - PLL 8 HSDIV  
+[10] - PLL 8 HSDIV  
+[11-12] - WKUP PLL HSDIV [3 & 8]
 */
 
 
@@ -510,9 +510,10 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 			for(int i=0;i<10;i++){
 				pll_hsdiv_val[i] = mmio_read_32(MAIN_PLL0_HSDIVx(i));
 			}
-			pll_hsdiv_val[10] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3));
-			pll_hsdiv_val[11] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8));
-			pll_hsdiv_val[12] = mmio_read_32(MAIN_PLL8_CTRL);
+			pll_hsdiv_val[10] = mmio_read_32(MAIN_PLL8_CTRL);
+			pll_hsdiv_val[11] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3));
+			pll_hsdiv_val[12] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8));
+	
 
 			//lpsc value save
 			for(int i=0;i<LPSC_COUNT;i++){
