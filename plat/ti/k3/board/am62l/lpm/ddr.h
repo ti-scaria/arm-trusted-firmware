@@ -39,4 +39,21 @@ __wkupsramfunc int32_t restore_ddr_reg_configs(void);
  */
 __wkupsramfunc int32_t save_ddr_reg_configs(void);
 
+/**
+ *  \brief  Execute DDR Frequency Set Point (FSP) change sequence
+ *
+ *  \return 0 on success, negative error code on failure:
+ *         -1: Timeout waiting for controller busy to clear
+ *         -2: Timeout waiting for FSP clock change request
+ *         -3: Invalid FSP request type
+ *         -4: Timeout waiting for clock change request to clear
+ *         -5: Timeout waiting for DDR FSP acknowledgment
+ *         -6: DDR FSP acknowledgment error bit set
+ *         -7: Timeout waiting for DFS interrupt status
+ *         -8: DFS operation error (HW/SW ignored or timeout)
+ */
+
+__wkupsramfunc int32_t execute_ddr_fsp_seq(uint8_t);
+
+
 #endif /* __LPM_DDR_H__ */

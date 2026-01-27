@@ -184,9 +184,9 @@ uintptr_t am62l_sec_entrypoint_glob;
 #define LPSC_ADDR(lpsc_id) MAIN_PSC_MDSTAT_BASE + (4 * lpsc_id)
 #define PSC_ADDR(psc_id) MAIN_PSC_PDSTAT_BASE + (4 * psc_id)
 
-#define CORE_IDLE_STATE 0x3
-#define CLUSTER_SHALLOW_IDLE_STATE 0x1
-#define CLUSTER_DEEP_IDLE_STATE 0x2
+#define CORE_IDLE_STATE 0x1
+#define CLUSTER_SHALLOW_IDLE_STATE 0x2
+#define CLUSTER_DEEP_IDLE_STATE 0x3
 
 #define GPIO_DIR 0x00600088
 #define GPIO_DIR_2 0x00600060
@@ -219,8 +219,6 @@ static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	mmio_write_32(MAIN_PLL0_HSDIVx(8), (pll_hsdiv_val[8] & ~(0xff)) | 0x27);
 	mmio_write_32(MAIN_PLL0_HSDIVx(9), (pll_hsdiv_val[9] & ~(0x8000)));
 
-	//Need to do DDR in low FSP
-
 	// A53 running of Bypass clock
 	mmio_write_32(MAIN_PLL8_CTRL, pll_hsdiv_val[12] | 0x80000000);
 
@@ -230,11 +228,17 @@ static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 			set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],1,2);
 		}
 	}
-
+	// uint64_t  context_save_addr = 0x80A00000;
+	// // Message to TIFS to PWUP CRYPTO LPSC
+	// ti_sci_prepare_sleep(7,context_save_addr,0);
+	
 	//DDR AUTO SELF REFRESH
 	mmio_write_32(0x0F3082A0,0x0000ff07);
 	mmio_write_32(0x0F3082A4,0x0F0F00FF);
 	mmio_write_32(0x0F30829C,0x07074007);
+
+	// DDR FSP2 -> FSP1
+	k3_suspend_to_ram(9);
 
 	// AUTO CLOCK GATING
 	mmio_write_32(0x43054050,0);
@@ -265,6 +269,8 @@ static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 			set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],1,2);
 		}
 	}
+
+
 	// Jumping to wkupsram to disable ARM PLL
 	k3_suspend_to_ram(11);
 	return;
@@ -449,11 +455,9 @@ static int am62l_validate_power_state(unsigned int power_state,
 		return PSCI_E_INVALID_PARAMS;
 
 	if (pstate == PSTATE_TYPE_STANDBY) {
-		CORE_PWR_STATE(req_state) = CORE_IDLE_STATE;
-
-		if(pwr_lvl >= MPIDR_AFFLVL1) {
-			CLUSTER_PWR_STATE(req_state) = (power_state & 0x7U);
-		}
+		CORE_PWR_STATE(req_state) = (power_state & 0xfU);
+		CLUSTER_PWR_STATE(req_state) = ((power_state >> 4) & 0xfU);
+		SYSTEM_PWR_STATE(req_state) = ((power_state >> 8) & 0xfU);
 
 	} else if (pstate && PSTATE_TYPE_POWERDOWN) {
 		/* 2. Only power down up to the requested level */
@@ -612,12 +616,18 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 			mmio_write_32(0x0F3082A0,0x0);
 			mmio_write_32(0x0F3082A4,0x0);
 			mmio_write_32(0x0F30829C,0x00004007);
+			k3_suspend_to_ram(10);
+
 			// LPSC
 			for(int i=0;i<5;i++){
 				if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
 				set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],psc_value[psc_id[i]],lpsc_value[lpsc_id[i]]);
 				}
 			}
+			// uint64_t  context_save_addr = 0x80A00000;
+			// uint32_t mode = 8;
+			// // Message to TIFS to PWUP CRYPTO LPSC
+			// ti_sci_prepare_sleep(mode,context_save_addr,0);
 
 		}
 
@@ -727,4 +737,30 @@ int plat_setup_psci_ops(uintptr_t sec_entrypoint,
 	*psci_ops = &am62l_plat_psci_ops;
 
 	return 0;
+}
+
+plat_local_state_t plat_get_target_pwr_state(unsigned int lvl,
+					     const plat_local_state_t *states,
+					     unsigned int ncpu)
+{
+	plat_local_state_t target = PLAT_MAX_OFF_STATE + 1, temp;
+	const plat_local_state_t *st = states;
+	unsigned int n = ncpu;
+
+	assert(ncpu > 0U);
+
+	do {
+		temp = *st;
+		st++;
+		/*  The power state of the CPU STANDBY called by fast path in psci_cpu_suspend()
+			is CORE_IDLE_STATE and the power states are in an increasing order of power saved.
+			Thus the target power is the minimum of the power states requested by all the cores
+			that is not CORE_IDLE_STATE.
+		*/
+		if ((temp < target) && (temp != CORE_IDLE_STATE))
+			target = temp;
+		n--;
+	} while (n > 0U);
+
+	return target;
 }

@@ -448,6 +448,17 @@ __wkupsramsuspendentry void k3_lpm_stub_entry(uint32_t mode)
 			lpm_seq_trace_fail(0xF0);
 		}
 	} 
+	else if (mode == 9) {
+
+		if(execute_ddr_fsp_seq(1)!=0)
+			ERROR("\n DDR FSP fault : standby \n");
+		
+	}	
+	else if (mode == 10) {
+		if(execute_ddr_fsp_seq(2)!=0)
+			ERROR("\n DDR FSP fault : resume \n");
+		
+	}	
 	else if (mode == 11) {
 		pll_save(&main_pll8);
 		lpm_seq_trace(0x1);

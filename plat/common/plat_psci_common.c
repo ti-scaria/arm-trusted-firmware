@@ -13,6 +13,8 @@
 #include <lib/utils_def.h>
 #include <plat/common/platform.h>
 
+#pragma weak plat_get_target_pwr_state
+
 #if ENABLE_PSCI_STAT && ENABLE_PMF
 #pragma weak plat_psci_stat_accounting_start
 #pragma weak plat_psci_stat_accounting_stop
@@ -149,7 +151,7 @@ plat_local_state_t plat_get_target_pwr_state(unsigned int lvl,
 					     const plat_local_state_t *states,
 					     unsigned int ncpu)
 {
-	plat_local_state_t target = 6, temp;
+	plat_local_state_t target = PLAT_MAX_OFF_STATE + 1, temp;
 	const plat_local_state_t *st = states;
 	unsigned int n = ncpu;
 
@@ -158,7 +160,8 @@ plat_local_state_t plat_get_target_pwr_state(unsigned int lvl,
 	do {
 		temp = *st;
 		st++;
-		if (temp < target)
+		ERROR("\n n = %d , state = %d \n",n,temp);
+		if ((temp < target) && (temp != 1))
 			target = temp;
 		n--;
 	} while (n > 0U);

@@ -143,7 +143,7 @@ __wkupsramfunc void write_mmr_field(uint32_t mmr_address, uint32_t field_value, 
  *         -7: Timeout waiting for DFS interrupt status
  *         -8: DFS operation error (HW/SW ignored or timeout)
  */
-__wkupsramfunc static int32_t execute_ddr_fsp_seq(uint8_t fsp_point)
+__wkupsramfunc int32_t execute_ddr_fsp_seq(uint8_t fsp_point)
 {
 	uint32_t req, req_type, timeout, int_status;
 
