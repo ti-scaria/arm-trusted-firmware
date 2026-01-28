@@ -223,9 +223,9 @@ static void low_latency_standby(volatile uint32_t *pll_hsdiv_val){
 	mmio_write_32(MAIN_PLL8_CTRL, pll_hsdiv_val[10] | 0x80000000);
 
 	// LPSC
-	for(int i=0;i<5;i++){
+	for(int i=0;i<4;i++){
 		if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
-			set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],1,2);
+			set_main_psc_state(psc_id[i],lpsc_id[i],1,2);
 		}
 	}
 	// uint64_t  context_save_addr = 0x80A00000;
@@ -266,7 +266,7 @@ static void low_power_standby(volatile uint32_t *pll_hsdiv_val){
 	// LPSC
 	for(int i=0;i<LPSC_COUNT;i++){
 		if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
-			set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],1,2);
+			set_main_psc_state(psc_id[i],lpsc_id[i],1,2);
 		}
 	}
 
@@ -494,7 +494,7 @@ volatile uint32_t pll_hsdiv_val[13];
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
-	// if(wait<500){
+	// if(wait<400){
 	// 	wait++;
 	// 	return;
 	// }
@@ -596,7 +596,7 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 
 static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {	
-	// if(wait<501){
+	// if(wait<401){
 	// 	return;
 	// }
 	/* Entering cluster standby sequence */
@@ -617,12 +617,13 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 			mmio_write_32(0x0F3082A0,0x0);
 			mmio_write_32(0x0F3082A4,0x0);
 			mmio_write_32(0x0F30829C,0x00004007);
+
 			k3_suspend_to_ram(10);
 
 			// LPSC
-			for(int i=0;i<5;i++){
+			for(int i=0;i<4;i++){
 				if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
-				set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],psc_value[psc_id[i]],lpsc_value[lpsc_id[i]]);
+				set_main_psc_state(psc_id[i],lpsc_id[i],psc_value[psc_id[i]],lpsc_value[lpsc_id[i]]);
 				}
 			}
 			// uint64_t  context_save_addr = 0x80A00000;
@@ -638,7 +639,7 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 			k3_suspend_to_ram(12);
 			for(int i=0;i<LPSC_COUNT;i++){
 				if(psc_value[psc_id[i]]!=0 && lpsc_value[lpsc_id[i]]!=0){
-				set_main_psc_state(psc_id[i],lpsc_id[lpsc_id[i]],psc_value[psc_id[i]],lpsc_value[lpsc_id[i]]);
+				set_main_psc_state(psc_id[i],lpsc_id[i],psc_value[psc_id[i]],lpsc_value[lpsc_id[i]]);
 				}
 			}	
 					
@@ -648,9 +649,9 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 		for(int i=0;i<10;i++){
 			mmio_write_32(MAIN_PLL0_HSDIVx(i), pll_hsdiv_val[i]);
 		}
-		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3),pll_hsdiv_val[10]);
-		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8),pll_hsdiv_val[11]);
-		mmio_write_32(MAIN_PLL8_CTRL,pll_hsdiv_val[12]);
+		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3),pll_hsdiv_val[11]);
+		mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8),pll_hsdiv_val[12]);
+		mmio_write_32(MAIN_PLL8_CTRL,pll_hsdiv_val[10]);
 
 		state_entered[core] = 0;
 		state_entered[1-core] = 0;
