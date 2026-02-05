@@ -157,9 +157,8 @@ static int am62l_pwr_domain_on(u_register_t mpidr)
 
 static void am62l_pwr_domain_off(const psci_power_state_t *target_state)
 {
-	//printf("\n Entered am62l_pwr_domain_off");
 	/* At very least the local core should be powering down */
-	//while(whileone);
+	while(whileone);
 	assert(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE);
 
 	/* Prevent interrupts from spuriously waking up this cpu */
@@ -261,19 +260,9 @@ static int am62l_validate_power_state(unsigned int power_state,
 
 }
 
-// Storing PLL HSDIVs values
-volatile uint32_t pll_hsdiv_val[13];
-/*
-[0-9] - PLL0 HSDIV [0-9]
-[10] - PLL 8 HSDIV  
-[11-12] - WKUP PLL HSDIV [3 & 8]
-*/
-
-
 #ifdef K3_AM62L_LPM
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
-
 	/* Entering cluster standby sequence */
 	if(CORE_PWR_STATE(target_state) == CORE_IDLE_STATE){
 		unsigned int core = plat_my_core_pos();
@@ -293,23 +282,26 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		return;
 	}
 	else if(CORE_PWR_STATE(target_state) == PLAT_MAX_OFF_STATE){
-		unsigned int core, proc_id=0;
+		unsigned int core, proc_id;
 		uint64_t  context_save_addr = 0x80A00000;
 		uint32_t mode = 6;
 		// timeout_local = 0xFFFFFFFF;
-		core = plat_my_core_pos();
 		INFO("dbg: %s\n", __func__);
 		whileone = 0xFEED1;
+
+		core = plat_my_core_pos();
+		proc_id = PLAT_PROC_START_ID + core;
+
 		if (core != 0) {
-		INFO("\n%s: A53 CORE: %d suspend\n", __func__, core);
-		onlycore_1st = 0xDEEDFF;
-		k3_gic_cpuif_disable();
-		/*
-		 * Now queue up the core shutdown request.
-		 * Also drop the power up reference that was increased as part
-		 * of scmi_handler_device_state_set_on earlier
-		 */
-		return;
+			INFO("\n%s: A53 CORE: %d suspend\n", __func__, core);
+			onlycore_1st = 0xDEEDFF;
+			k3_gic_cpuif_disable();
+			/*
+			* Now queue up the core shutdown request.
+			* Also drop the power up reference that was increased as part
+			* of scmi_handler_device_state_set_on earlier
+			*/
+			return;
 		}
 
 		// wait for the other core to do it's thing
@@ -340,17 +332,10 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 			k3_config_wake_sources(true);
 			ti_sci_enter_sleep(proc_id, mode, am62l_sec_entrypoint);
 			INFO("sent enter sleep message\n");
-
-
-			core = plat_my_core_pos();
-			proc_id = PLAT_PROC_START_ID + core;
-
-			/* Prevent interrupts from spuriously waking up this cpu */
-			k3_gic_cpuif_disable();
-			k3_gic_save_context();
-			clks_suspend();
-
 		}
+
+		INFO("!!DHG Suspend Sequence in ATF core(%d)\n", core);
+		k3_suspend_to_ram(mode);
 	}
 }
 
