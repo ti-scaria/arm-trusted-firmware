@@ -37,7 +37,6 @@ volatile unsigned int val_mdctl;
 volatile unsigned int val_mdstat;
 volatile uint32_t am62l_lpm_state = 0xDEAD;
 /* Sync helper for core 0 to check if core 1 hit wfi. 0xDEEDFF indicates WFI. */
-volatile int core_1_wfi_status = 0x0;
 /*
  * CPU Hot plug(CPU HP) status flag, used to differentiate if it's regular
  * deep or s2idle mem_sleep from the OS
@@ -146,12 +145,8 @@ static void am62l_pwr_down_domain(const psci_power_state_t *target_state)
 	int core;
 
 	core = plat_my_core_pos();
-
-	/* If our cluster is not going down we stop here */
-	if (SYSTEM_PWR_STATE(target_state) != PLAT_MAX_OFF_STATE) {
-		VERBOSE("%s: A53 CORE: %d OFF\n", __func__, core);
-		am62l_core_pwr_domain_off(core);
-	}
+	VERBOSE("%s: A53 CORE: %d OFF\n", __func__, core);
+	am62l_core_pwr_domain_off(core);
 }
 
 void am62l_pwr_domain_on_finish(const psci_power_state_t *target_state)
@@ -243,14 +238,15 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		if (core != 0) {
 			INFO("\n%s: A53 CORE: %d suspend\n", __func__, core);
 			/* Signal that secondary core has entered suspend */
-			core_1_wfi_status = 0xDEEDFF;
 			k3_gic_cpuif_disable();
 			return;
 		}
 
 		/* wait 1000uS for the other core to finish sequence and hit wfi */
+		uint32_t core_1_mdstate = mmio_read_32(0x00400800 + (4 * 41)) & 0x1fU;
 		uint32_t timeout_core_wfi = 1000;
-		while((core_1_wfi_status != 0xDEEDFF) && (timeout_core_wfi != 0)) {
+		while((core_1_mdstate != 0) && (timeout_core_wfi != 0)) {
+			core_1_mdstate = mmio_read_32(0x00400800 + (4 * 41)) & 0x1fU;
 			timeout_core_wfi--;
 			udelay(10);
 		}
@@ -263,7 +259,7 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		if (mode != 0xDEAD && timeout_core_wfi != 0) {
 			INFO ("%s: mode = %d", __func__, mode);
 			/* power off the other core as it should be in WFI by now. */
-			am62l_core_pwr_domain_off(1);
+			//am62l_core_pwr_domain_off(1);
 		} else if (timeout_core_wfi == 0) {
 			ERROR("%s: timeout waiting for core 1", __func__);
 		} else {
@@ -388,6 +384,34 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 		plat_ic_raise_ns_sgi(60, 0);
 
 		am62l_core_pwr_domain_on(1);
+
+		u_register_t scr;
+
+		/*
+		 * Enable Group 1 NS interrupts at the CPU interface.
+		 * This is the key fix: gicv3_cpuif_enable() does not
+		 * enable G1NS, so the pending NS SGI would be masked.
+		 */
+		write_icc_igrpen1_el3(read_icc_igrpen1_el3() |
+				IGRPEN1_EL3_ENABLE_G1NS_BIT);
+		isb();
+
+		/*
+		 * Route IRQ and FIQ to EL3 so the pending NS SGI
+		 * generates a physical WFI wake-up event.
+		 */
+		scr = read_scr_el3();
+		write_scr_el3(scr | SCR_IRQ_BIT | SCR_FIQ_BIT);
+		isb();
+		dsb();
+
+		/* Wait for IPI from kernel */
+		wfi();
+
+		/* Restore SCR_EL3 to original value */
+		write_scr_el3(scr);
+		isb();
+
 	} else {
 		return;
 	}
@@ -397,7 +421,6 @@ static void am62l_pwr_domain_suspend_finish(const psci_power_state_t *target_sta
 	 * This must be done after resume is complete to ensure
 	 * proper synchronization on subsequent suspend attempts.
 	 */
-	core_1_wfi_status = 0x0;
 	am62l_lpm_state = 0xDEAD;
 }
 
