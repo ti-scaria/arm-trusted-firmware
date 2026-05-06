@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <board_def.h>
 #include <lib/mmio.h>
+#include <lpm_stub.h>
 #include <standby.h>
 
 #define MAIN_PSC_BASE		0x00400000
@@ -244,10 +245,12 @@ void am62l_low_latency_standby_sequence()
 	/* Bypass MAIN PLL8 */
 	mmio_write_32(MAIN_PLL8_CTRL, saved_state.pll_hsdiv_val[10] | PLL_BYP_EN_MASK);
 
+	k3low_suspend_to_ram(11);
+
 	/* Enable DDR Auto self refresh */
-	for (int i = 0; i < DDR_CTL_COUNT_LOW_LAT_STBY; i++) {
-		mmio_write_32(stby_ddr_ctrl_regs[i].addr, stby_ddr_ctrl_regs[i].val);
-	}
+	// for (int i = 0; i < DDR_CTL_COUNT_LOW_LAT_STBY; i++) {
+	// 	mmio_write_32(stby_ddr_ctrl_regs[i].addr, stby_ddr_ctrl_regs[i].val);
+	// }
 
 	/* Enable AUTO CLOCK GATING */
 	mmio_write_32(WKUP_CTRL_MMR_CFG5_CLKGATE_CTRL0, EN_AUTO_CLKGATE);
@@ -265,9 +268,9 @@ void am62l_standby_restore_state()
     mmio_write_32(WKUP_CTRL_MMR_CFG5_CLKGATE_CTRL0, saved_state.auto_clk_gate);
 
 	/* Restore EMIF LP control registers */
-	for (int i = 0; i < DDR_CTL_COUNT_LOW_LAT_STBY; i++) {
-		mmio_write_32(stby_ddr_ctrl_regs[i].addr, saved_state.ddr_reg[i]);
-	}
+	// for (int i = 0; i < DDR_CTL_COUNT_LOW_LAT_STBY; i++) {
+	// 	mmio_write_32(stby_ddr_ctrl_regs[i].addr, saved_state.ddr_reg[i]);
+	// }
 
     /* Restore PLL */
     for (int i = 0;i < PLL_COUNT_LOW_LAT_STBY - 1;i++) {

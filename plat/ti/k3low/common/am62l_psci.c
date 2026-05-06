@@ -208,6 +208,7 @@ static int am62l_validate_power_state(unsigned int power_state,
 		CLUSTER_PWR_STATE(req_state) = PWR_LVL_STATE(power_state, MPIDR_AFFLVL1);
 		SYSTEM_PWR_STATE(req_state) = PWR_LVL_STATE(power_state, PLAT_MAX_PWR_LVL);
 	} else if (pstate == PSTATE_TYPE_POWERDOWN) {
+		ERROR("Powerdown request received for core %d, power_state=0x%x\n", core, power_state);
 		for (i = MPIDR_AFFLVL0; i <= pwr_lvl; i++)
 			req_state->pwr_domain_state[i] = PLAT_MAX_OFF_STATE;
 		if (power_state == LPM_PSTATE_DEEPSLEEP) {
@@ -229,7 +230,7 @@ static int am62l_validate_power_state(unsigned int power_state,
 static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
 	uint32_t core, proc_id;
-	uint32_t mode = 0;
+	uint32_t mode = 6;
 	core = plat_my_core_pos();
 	uint64_t context_save_addr = TIFS_LPM_SAVE_CTX;
 
@@ -249,7 +250,7 @@ static void am62l_pwr_domain_suspend(const psci_power_state_t *target_state)
 		}
 
 		/* wait 10000uS for the other core to finish suspend sequence and turn itself off */
-		uint32_t timeout_core_wfi = 1000;
+		uint32_t timeout_core_wfi = 1000000;
 		uint32_t core_1_mdstat_ptr = MAIN_PSC_MDSTAT_BASE + (4 * LPSC_MAIN_MPU_CLST_CORE_1);
 		volatile uint32_t core_1_mdstat;
 

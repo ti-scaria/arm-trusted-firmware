@@ -30,4 +30,6 @@ __wkupsramfunc int32_t k3low_ddr_deep_sleep_resume_sequence(void);
  */
 __wkupsramfunc int32_t k3low_ddr_deep_sleep_suspend_sequence(void);
 
+__wkupsramfunc int32_t execute_ddr_fsp_seq(uint8_t fsp_point);
+
 #endif /* __LPM_DDR_H__ */

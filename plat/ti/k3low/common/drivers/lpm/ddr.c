@@ -178,7 +178,7 @@ __wkupsramfunc static void enable_ddr_data_retention(void)
  *         -7: Timeout waiting for DFS interrupt status
  *         -8: DFS operation error (HW/SW ignored or timeout)
  */
-__wkupsramfunc static int32_t execute_ddr_fsp_seq(uint8_t fsp_point)
+__wkupsramfunc int32_t execute_ddr_fsp_seq(uint8_t fsp_point)
 {
 	uint32_t req, req_type, timeout, int_status;
 
