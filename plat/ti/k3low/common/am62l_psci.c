@@ -197,6 +197,7 @@ static void am62l_system_reset(void)
 static int am62l_validate_power_state(unsigned int power_state,
 				   psci_power_state_t *req_state)
 {
+	//ERROR("%s: power_state=0x%x \n", __func__, power_state);
 	unsigned int pwr_lvl = psci_get_pstate_pwrlvl(power_state);
 	unsigned int pstate = psci_get_pstate_type(power_state);
 	unsigned int core = plat_my_core_pos();
