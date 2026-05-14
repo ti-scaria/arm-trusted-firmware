@@ -480,7 +480,7 @@ __wkupsramsuspendentry void k3low_lpm_stub_entry(uint32_t mode)
 			wfi();
 			lpm_seq_trace_fail(LPM_SEQ_UNEXPECTED_WFI_RETURN);
 		}
-	} else if (mode == TI_K3_HIGH_LATENCY_STANDBY) {
+	} else if (mode == TI_K3_HIGH_LATENCY_STANDBY_ENTER) {
 		/* Handle high latency standby mode */
 
 		/* USB disable*/
@@ -500,24 +500,36 @@ __wkupsramsuspendentry void k3low_lpm_stub_entry(uint32_t mode)
 		k3low_pll_disable(&main_pll17);
 
 		/* DDR Self Refresh*/
-		if (k3low_ddr_deep_sleep_suspend_sequence() != 0) {
-			lpm_seq_trace_fail(LPM_SEQ_SAVE_DDR_REGS);
-			k3low_lpm_abort();
-		} else {
-			lpm_seq_trace(LPM_SEQ_SAVE_DDR_REGS);
-		}
+		// if (k3low_ddr_deep_sleep_suspend_sequence() != 0) {
+		// 	lpm_seq_trace_fail(LPM_SEQ_SAVE_DDR_REGS);
+		// 	k3low_lpm_abort();
+		// } else {
+		// 	lpm_seq_trace(LPM_SEQ_SAVE_DDR_REGS);
+		// }
+
+		uint32_t ddr_pll_hsdiv = mmio_read_32(0x04060088);
+		mmio_write_32(0x04060088, ddr_pll_hsdiv & ~(0x8000U));
+		
+		lpm_seq_trace(0x4U);
 
 		wfi();
 
-		/* Bring DDR out of Self Refresh*/
-		if (k3low_ddr_deep_sleep_resume_sequence() != 0) {
-			lpm_seq_trace_fail(LPM_SEQ_RESTORE_DDR_REGS);
-			k3low_lpm_abort();
-		} else {
-			lpm_seq_trace(LPM_SEQ_RESTORE_DDR_REGS);
-		}
+		lpm_seq_trace(0x5U);
 
+		mmio_write_32(0x04060088, ddr_pll_hsdiv);
+
+		lpm_seq_trace(0x6U);
+
+		/* Bring DDR out of Self Refresh*/
+		// if (k3low_ddr_deep_sleep_resume_sequence() != 0) {
+		// 	lpm_seq_trace_fail(LPM_SEQ_RESTORE_DDR_REGS);
+		// 	k3low_lpm_abort();
+		// } else {
+		// 	lpm_seq_trace(LPM_SEQ_RESTORE_DDR_REGS);
+		// }
+	} else if (mode == TI_K3_HIGH_LATENCY_STANDBY_RESUME) {
 		/* restore PLL17 */
+		lpm_seq_trace(0x7U);
 		k3low_pll_restore(&main_pll17);
 
 		/* restore PLL8 */
@@ -527,6 +539,7 @@ __wkupsramsuspendentry void k3low_lpm_stub_entry(uint32_t mode)
 		if (restore_usb_lpsc() != 0) {
 			k3low_lpm_abort();
 		}
+		lpm_seq_trace(0x8U);
 	} else  {
 		for (;;) {
 			lpm_seq_trace_fail(LPM_SEQ_INVALID_MODE);

@@ -10,6 +10,8 @@
 #include <standby.h>
 #include <lpm_stub.h>
 #include <ti_sci.h>
+#include <k3_gicv3.h>
+#include <drivers/arm/gicv3.h>
 
 #define MAIN_PSC_BASE		0x00400000
 #define MAIN_PSC_MDCTL_BASE	0x00400A00
@@ -39,7 +41,7 @@
 #define MAIN_PLL8_CTRL MAIN_PLL8_BASE + 0x20
 #define MAIN_PLL17_BASE MAIN_PLL_MMR_CFG_BASE + 0x1000 * 17
 #define MAIN_PLL17_CTRL MAIN_PLL17_BASE + 0x20
-#define WKUP_MAIN_PLL0_HSDIVx(x)	WKUP_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
+#define WKUP_PLL0_HSDIVx(x)	WKUP_PLL_MMR_CFG_BASE + 0x80 + (0x4 * x)
 
 #define PLL_COUNT_LOW_LAT_STBY 11
 #define PLL_COUNT_HIGH_LAT_STBY 14
@@ -62,9 +64,6 @@
 #define EN_AUTO_CLKGATE 0U
 #define WKUP_CTRL_MMR_CFG5_CLKGATE_CTRL0 0x43054050
 
-#define LPSC_COUNT_LOW_LAT_STBY 5
-#define LPSC_COUNT_HIGH_LAT_STBY 19
-
 /*
  * @brief Structure to store power domain and corresponding lpsc
  * \param pd_id Power domain index of LPSC
@@ -84,18 +83,21 @@ static const struct pd_lpsc_id stby_pd_lpsc_table[] = {
 	{ .pd_id = 0, .lpsc_id = 11 },   /* LPSC_gp_dphy_tx value */
 	{ .pd_id = 3, .lpsc_id = 25 },   /* LPSC_mainip_dss */
 	{ .pd_id = 3, .lpsc_id = 26 },   /* LPSC_mainip_dsi */
-	{ .pd_id = 3, .lpsc_id = 28 },   /* LPSC_mainip_emmc4b0 */
+	//{ .pd_id = 3, .lpsc_id = 28 },   /* LPSC_mainip_emmc4b0 */
 	{ .pd_id = 3, .lpsc_id = 29 },   /* LPSC_mainip_emmc4b1 */
 	{ .pd_id = 3, .lpsc_id = 30 },   /* LPSC_mainip_cpsw */
-	{ .pd_id = 9, .lpsc_id = 45 },   /* LPSC_main_per_mcasp0 */
+	// { .pd_id = 9, .lpsc_id = 45 },   /* LPSC_main_per_mcasp0 */
 	{ .pd_id = 9, .lpsc_id = 46 },   /* LPSC_main_per_mcasp1 */
 	{ .pd_id = 9, .lpsc_id = 47 },   /* LPSC_main_per_mcasp2 */
 	{ .pd_id = 9, .lpsc_id = 49 },   /* LPSC_main_per_mcan0 */
 	{ .pd_id = 9, .lpsc_id = 50 },   /* LPSC_main_per_mcan1 */
 	{ .pd_id = 9, .lpsc_id = 51 },   /* LPSC_main_per_mcan2 */
 	{ .pd_id = 9, .lpsc_id = 52 },   /* LPSC_main_per_gpmc */
-	{ .pd_id = 9, .lpsc_id = 53 },   /* LPSC_main_per_adc */
+	//{ .pd_id = 9, .lpsc_id = 53 },   /* LPSC_main_per_adc */
 };
+
+#define LPSC_COUNT_LOW_LAT_STBY 5
+#define LPSC_COUNT_HIGH_LAT_STBY sizeof(stby_pd_lpsc_table)/sizeof(struct pd_lpsc_id)
 
 static const struct pd_lpsc_id core_state[2] = {
 	{ .pd_id = 5, .lpsc_id = 40 }, /* LPSC_main_mpu_clst0_core0 */
@@ -221,8 +223,8 @@ void am62l_standby_save_state()
     }
 	saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY - 1] = mmio_read_32(MAIN_PLL0_CTRL);
     saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY] = mmio_read_32(MAIN_PLL8_CTRL);
-	saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 1] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(3));
-	saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 2] = mmio_read_32(WKUP_MAIN_PLL0_HSDIVx(8));
+	saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 1] = mmio_read_32(WKUP_PLL0_HSDIVx(3));
+	saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 2] = mmio_read_32(WKUP_PLL0_HSDIVx(8));
 
     /* Save LPSC values */
     for (int i = 0; i < LPSC_COUNT_HIGH_LAT_STBY; i++) {
@@ -234,9 +236,9 @@ void am62l_standby_save_state()
 	}
 
 	/* Save EMIF LP control registers */
-	for (int i = 0; i < DDR_CTL_COUNT_LOW_LAT_STBY; i++) {
-		saved_state.ddr_reg[i] = mmio_read_32(stby_ddr_ctrl_regs[i].addr);
-	}
+	// for (int i = 0; i < DDR_CTL_COUNT_LOW_LAT_STBY; i++) {
+	// 	saved_state.ddr_reg[i] = mmio_read_32(stby_ddr_ctrl_regs[i].addr);
+	// }
 
 	/* Save AUTO CLOCK GATING state */
     saved_state.auto_clk_gate = mmio_read_32(WKUP_CTRL_MMR_CFG5_CLKGATE_CTRL0);
@@ -288,30 +290,25 @@ void am62l_low_latency_standby_sequence()
 
 void am62l_high_latency_standby_sequence(uint32_t core)
 {
+
 	/* Change the LPSC values only if they are not already turned off */
 	for (int i = 0; i < LPSC_COUNT_HIGH_LAT_STBY; i++) {
 		if (saved_state.lpsc_value[i] != PSC_SYNCRESETDISABLE) {
-			ERROR("Turning off LPSC pd_id=%d, lpsc_id=%d\n", stby_pd_lpsc_table[i].pd_id, stby_pd_lpsc_table[i].lpsc_id);
+			//ERROR("Turning off LPSC pd_id=%d, lpsc_id=%d\n", stby_pd_lpsc_table[i].pd_id, stby_pd_lpsc_table[i].lpsc_id);
 			set_main_psc_state(stby_pd_lpsc_table[i].pd_id, stby_pd_lpsc_table[i].lpsc_id, PSC_PD_ON, PSC_DISABLE);
 		}
-	}
-	/* Turn off the other core*/
-	if(saved_state.core_lpsc_value[1-core] != PSC_SYNCRESETDISABLE) {
-		ERROR("Turning off other core pd_id=%d, lpsc_id=%d\n", core_state[1-core].pd_id, core_state[1-core].lpsc_id);
-		set_main_psc_state(core_state[1-core].pd_id, core_state[1-core].lpsc_id, PSC_PD_ON, PSC_DISABLE);
-
 	}
 	/*
 	 * High latency standby PLL scaling (ref: AM62L_OS_Idle_Setting_v1.1_AVV.xlsx) -
 	 * PLL0_HSDIVOUT0 : BYPASS,
-	 * PLL0_HSDIVOUT5 : 200Mhz, hsdiv = 4,
-	 * PLL0_HSDIVOUT6 : 250Mhz, hsdiv = 3,
-	 * PLL0_HSDIVOUT7 : 166Mhz, hsdiv = 5,
-	 * PLL0_HSDIVOUT8 : 25Mhz,  hsdiv = 39,
-	 * PLL0_HSDIVOUT9 : DISABLED,
-	 * PLL8_HSDIVOUT0 : BYPASS,
+	 * PLL0_HSDIVOUT5 : ,
+	 * PLL0_HSDIVOUT6 : ,
+	 * PLL0_HSDIVOUT7 : ,
+	 * PLL0_HSDIVOUT8 : ,
+	 * PLL0_HSDIVOUT9 : ,
+	 * PLL8_HSDIVOUT0 : ,
 	 */
-	mmio_write_32(MAIN_PLL0_CTRL, saved_state.pll_hsdiv_val[10] | PLL_BYP_EN_MASK);
+	mmio_write_32(MAIN_PLL0_HSDIVx(0), (saved_state.pll_hsdiv_val[0] & ~(PLL_HSDIV_MASK)) | 0x4f);
 	mmio_write_32(MAIN_PLL0_HSDIVx(3), (saved_state.pll_hsdiv_val[3] & ~(PLL_CLK_EN_MASK)));
 	mmio_write_32(MAIN_PLL0_HSDIVx(4), (saved_state.pll_hsdiv_val[4] & ~(PLL_CLK_EN_MASK)));
 	mmio_write_32(MAIN_PLL0_HSDIVx(5), (saved_state.pll_hsdiv_val[5] & ~(PLL_HSDIV_MASK)) | 0x4);
@@ -319,13 +316,14 @@ void am62l_high_latency_standby_sequence(uint32_t core)
 	mmio_write_32(MAIN_PLL0_HSDIVx(7), (saved_state.pll_hsdiv_val[7] & ~(PLL_HSDIV_MASK)) | 0x5);
 	mmio_write_32(MAIN_PLL0_HSDIVx(8), (saved_state.pll_hsdiv_val[8] & ~(PLL_CLK_EN_MASK)));
 	mmio_write_32(MAIN_PLL0_HSDIVx(9), (saved_state.pll_hsdiv_val[9] & ~(PLL_CLK_EN_MASK)));
-	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), (saved_state.pll_hsdiv_val[12] & ~(PLL_CLK_EN_MASK)));
-	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), (saved_state.pll_hsdiv_val[13] & ~(PLL_CLK_EN_MASK)));
+	mmio_write_32(WKUP_PLL0_HSDIVx(3), (saved_state.pll_hsdiv_val[12] & ~(PLL_CLK_EN_MASK)));
+	mmio_write_32(WKUP_PLL0_HSDIVx(8), (saved_state.pll_hsdiv_val[13] & ~(PLL_CLK_EN_MASK)));
 
 	/* Enable AUTO CLOCK GATING */
 	mmio_write_32(WKUP_CTRL_MMR_CFG5_CLKGATE_CTRL0, EN_AUTO_CLKGATE);
 
-	k3low_suspend_to_ram(TI_K3_HIGH_LATENCY_STANDBY);
+	k3low_suspend_to_ram(TI_K3_HIGH_LATENCY_STANDBY_ENTER);
+	ERROR("Core %d exited LPM STUB from high latency standby sequence\n", core);
 	return;
 }
 
@@ -334,7 +332,7 @@ void am62l_high_latency_standby_sequence(uint32_t core)
  * Restores PLL configurations, LPSC states, DDR controller registers,
  * and clock gating settings to their pre-standby values.
  */
-void am62l_standby_restore_state(uint32_t core,uint32_t cluster_pwr_state)
+void am62l_standby_restore_state(uint32_t core, uint32_t cluster_pwr_state)
 {
 	/* Restore AUTO CLOCK GATING state */
 	mmio_write_32(WKUP_CTRL_MMR_CFG5_CLKGATE_CTRL0, saved_state.auto_clk_gate);
@@ -350,20 +348,17 @@ void am62l_standby_restore_state(uint32_t core,uint32_t cluster_pwr_state)
 	}
 	mmio_write_32(MAIN_PLL0_CTRL, saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY - 1]);
 	mmio_write_32(MAIN_PLL8_CTRL, saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY]);
-	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(3), saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 1]);
-	mmio_write_32(WKUP_MAIN_PLL0_HSDIVx(8), saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 2]);
+	mmio_write_32(WKUP_PLL0_HSDIVx(3), saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 1]);
+	mmio_write_32(WKUP_PLL0_HSDIVx(8), saved_state.pll_hsdiv_val[PLL_COUNT_LOW_LAT_STBY + 2]);
 
 	/* Restore LPSC states */
-	for (int i = 0;i < LPSC_COUNT_HIGH_LAT_STBY;i++) {
+	for (int i = 0; i < LPSC_COUNT_HIGH_LAT_STBY; i++) {
 		if (saved_state.lpsc_value[i] != PSC_SYNCRESETDISABLE) {
 			set_main_psc_state(stby_pd_lpsc_table[i].pd_id, stby_pd_lpsc_table[i].lpsc_id, PSC_PD_ON, saved_state.lpsc_value[i]);
 		}
 	}
-
-	if (cluster_pwr_state == HIGH_LATENCY_IDLE_STATE) {
-		/* Restore the other core only if we were in high latency standby */
-		if(saved_state.core_lpsc_value[1-core] != PSC_SYNCRESETDISABLE)
-			set_main_psc_state(core_state[1-core].pd_id, core_state[1-core].lpsc_id, PSC_PD_ON, saved_state.core_lpsc_value[1-core]);
+	if (state_entered[core] == HIGH_LATENCY_IDLE_STATE) {
+		k3low_suspend_to_ram(TI_K3_HIGH_LATENCY_STANDBY_RESUME);
 	}
 
 }
@@ -377,12 +372,13 @@ void am62l_enter_standby(uint32_t core, uint32_t cluster_pwr_state)
 	}
 	state_entered[core] = cluster_pwr_state;
 
+	/* Updating the SCR register to enter WFI */
+	am62l_standby_scr_reg = read_scr_el3();
+	write_scr_el3(am62l_standby_scr_reg | SCR_IRQ_BIT | SCR_FIQ_BIT);
+	isb();
+	dsb();
+
 	if (!in_standby || in_standby < state_entered[core]) {
-		/* Updating the SCR register to enter WFI */
-		am62l_standby_scr_reg = read_scr_el3();
-		write_scr_el3(am62l_standby_scr_reg | SCR_IRQ_BIT | SCR_FIQ_BIT);
-		isb();
-		dsb();
 		if (state_entered[core] == LOW_LATENCY_IDLE_STATE) {
 			am62l_low_latency_standby_sequence();
 		} else if (state_entered[core] == HIGH_LATENCY_IDLE_STATE) {

@@ -112,17 +112,17 @@ __wkupsramdata uint32_t dram_class;
  *
  * @param h Pointer to EMIF handle structure
  */
-__wkupsramfunc static void poll_for_init_completion(struct emif_handle_s *h)
-{
-	/* Poll for PI Init completion */
-	while (((mmio_read_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(83))) & 0x1) != 0x1) {
-	}
-	/* Poll for CTL Init completion */
-	while (((mmio_read_32(h->ctl_cfg_base_addr +
-			      CTLCFG_DENALI_CTL_(342))) &
-		0x02000000) != 0x02000000) {
-	}
-}
+// __wkupsramfunc static void poll_for_init_completion(struct emif_handle_s *h)
+// {
+// 	/* Poll for PI Init completion */
+// 	while (((mmio_read_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(83))) & 0x1) != 0x1) {
+// 	}
+// 	/* Poll for CTL Init completion */
+// 	while (((mmio_read_32(h->ctl_cfg_base_addr +
+// 			      CTLCFG_DENALI_CTL_(342))) &
+// 		0x02000000) != 0x02000000) {
+// 	}
+// }
 
 /**
  * @brief Write to a specific field in an MMR
@@ -149,18 +149,18 @@ __wkupsramfunc static void write_mmr_field(uint32_t mmr_address, uint32_t field_
 /**
  * @brief Enable DDR data retention mode
  */
-__wkupsramfunc static void enable_ddr_data_retention(void)
-{
-	uint32_t val;
+// __wkupsramfunc static void enable_ddr_data_retention(void)
+// {
+// 	uint32_t val;
 
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x6U, 4U, 0U);
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x1U, 1U, 31U);
-	val = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
-	while (val != ((1U << 31) | 0x6U)) {
-		val = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
-	}
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 1U, 31U);
-}
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x6U, 4U, 0U);
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x1U, 1U, 31U);
+// 	val = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
+// 	while (val != ((1U << 31) | 0x6U)) {
+// 		val = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
+// 	}
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 1U, 31U);
+// }
 
 /**
  * @brief Execute DDR Frequency Set Point (FSP) change sequence
@@ -372,263 +372,263 @@ __wkupsramfunc static void emif_instance_select(struct emif_handle_s *h)
  *
  * @param h Pointer to EMIF handle structure
  */
-__wkupsramfunc static void start_PI_CTL_init(struct emif_handle_s *h)
-{
-	uint32_t wr_init_val;
+// __wkupsramfunc static void start_PI_CTL_init(struct emif_handle_s *h)
+// {
+// 	uint32_t wr_init_val;
 
-	wr_init_val = ((dram_class << DDR_MEM_CLASS_SHIFT) | 0x1);
-	/* Set START bit in register for PI module */
-	mmio_write_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(0), wr_init_val);
-	volatile int i = 0;
+// 	wr_init_val = ((dram_class << DDR_MEM_CLASS_SHIFT) | 0x1);
+// 	/* Set START bit in register for PI module */
+// 	mmio_write_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(0), wr_init_val);
+// 	volatile int i = 0;
 
-	for (i = 0; i < 1000; i++) {
-	}
-	/* Set START bit in register for controller */
-	mmio_write_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(0), wr_init_val);
-}
+// 	for (i = 0; i < 1000; i++) {
+// 	}
+// 	/* Set START bit in register for controller */
+// 	mmio_write_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(0), wr_init_val);
+// }
 
 /**
  * @brief Save DDR registers to memory
  *
  * @param h Pointer to EMIF handle structure
  */
-__wkupsramfunc static void save_ddr_registers(struct emif_handle_s *h)
-{
-	int i, j;
-	uint8_t current_freq_set;
+// __wkupsramfunc static void save_ddr_registers(struct emif_handle_s *h)
+// {
+// 	int i, j;
+// 	uint8_t current_freq_set;
 
-	/* DDRSS Memory Base */
-	uint32_t DDR_CTL_REG_BASE = h->ctl_cfg_base_addr;
-	uint32_t DDR_PI_REG_BASE = (h->ctl_cfg_base_addr) +
-				   DDRSS_PI_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_DATA_SLICE_0_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_0_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_DATA_SLICE_1_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_1_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_ADDR_SLICE_0_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_0_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_ADDR_SLICE_1_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_1_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_ADDR_SLICE_2_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_2_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_CORE_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_PHY_CORE_REGISTER_BLOCK_OFFS;
+// 	/* DDRSS Memory Base */
+// 	uint32_t DDR_CTL_REG_BASE = h->ctl_cfg_base_addr;
+// 	uint32_t DDR_PI_REG_BASE = (h->ctl_cfg_base_addr) +
+// 				   DDRSS_PI_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_DATA_SLICE_0_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_0_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_DATA_SLICE_1_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_1_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_ADDR_SLICE_0_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_0_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_ADDR_SLICE_1_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_1_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_ADDR_SLICE_2_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_2_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_CORE_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_PHY_CORE_REGISTER_BLOCK_OFFS;
 
-	ddrss_is_fsp_supported = 0;
+// 	ddrss_is_fsp_supported = 0;
 
-	save_sdram_region_idx(h);
+// 	save_sdram_region_idx(h);
 
-	/* Update the PI_INIT_WORK_FREQ and INIT_FREQ on the basis of current frequency set */
-	current_freq_set = ((mmio_read_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(153))) >> DDR_MEM_ACTIVE_FREQ_SHIFT) & DDR_MEM_ACTIVE_FREQ_MASK;
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(11), current_freq_set, 5, 0);
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(178), current_freq_set, 2, 0);
+// 	/* Update the PI_INIT_WORK_FREQ and INIT_FREQ on the basis of current frequency set */
+// 	current_freq_set = ((mmio_read_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(153))) >> DDR_MEM_ACTIVE_FREQ_SHIFT) & DDR_MEM_ACTIVE_FREQ_MASK;
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(11), current_freq_set, 5, 0);
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(178), current_freq_set, 2, 0);
 
-	/* Save the class of DRAM */
-	dram_class = ((mmio_read_32(DDR_CTL_REG_BASE) & DDR_MEM_CLASS_MASK)) >> DDR_MEM_CLASS_SHIFT;
+// 	/* Save the class of DRAM */
+// 	dram_class = ((mmio_read_32(DDR_CTL_REG_BASE) & DDR_MEM_CLASS_MASK)) >> DDR_MEM_CLASS_SHIFT;
 
-	j = 0;
-	for (i = 0; i < NUM_DDR_CTL_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_CTL_REG_BASE + i * 4);
-	}
-	for (i = 0; i < NUM_DDR_PI_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_PI_REG_BASE + i * 4);
-	}
-	/* Save the current operating frequency register set (set 2) */
-	for (i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4);
-	}
-	for (i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4);
-	}
-	for (i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4);
-	}
-	for (i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4);
-	}
-	for (i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4);
-	}
-	/* Multicast will be disabled if multiple FSPs are configured */
-	if (((mmio_read_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PHY_(1281))) & BIT(8)) == 0U) {
-		/* Set the flag to indicate that FSP is supported */
-		ddrss_is_fsp_supported = 1;
-	}
-	for (i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
-		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_CORE_REG_BASE + i * 4);
-	}
-	if (ddrss_is_fsp_supported == 1) {
+// 	j = 0;
+// 	for (i = 0; i < NUM_DDR_CTL_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_CTL_REG_BASE + i * 4);
+// 	}
+// 	for (i = 0; i < NUM_DDR_PI_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_PI_REG_BASE + i * 4);
+// 	}
+// 	/* Save the current operating frequency register set (set 2) */
+// 	for (i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4);
+// 	}
+// 	for (i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4);
+// 	}
+// 	for (i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4);
+// 	}
+// 	for (i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4);
+// 	}
+// 	for (i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4);
+// 	}
+// 	/* Multicast will be disabled if multiple FSPs are configured */
+// 	if (((mmio_read_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PHY_(1281))) & BIT(8)) == 0U) {
+// 		/* Set the flag to indicate that FSP is supported */
+// 		ddrss_is_fsp_supported = 1;
+// 	}
+// 	for (i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
+// 		ddrss_save_restore[j] = mmio_read_32(DDR_PHY_CORE_REG_BASE + i * 4);
+// 	}
+// 	if (ddrss_is_fsp_supported == 1) {
 
-		/* Write phy_freq_sel_index = 1 so that second frequency set can be saved */
-		mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PHY_(1281), BIT(16));
+// 		/* Write phy_freq_sel_index = 1 so that second frequency set can be saved */
+// 		mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PHY_(1281), BIT(16));
 
-		/* Save the second register set */
-		for (i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
-			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4);
-		}
-		for (i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
-			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4);
-		}
-		for (i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
-			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4);
-		}
-		for (i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
-			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4);
-		}
-		for (i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
-			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4);
-		}
-		/* Save the DDR PHY set with correct frequency select index */
-		for (i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
-			if (i == DDRSS_PHY_CORE_REGISTER_1281_POS) {
-				ddrss_save_restore[j] = DDRSS_PHY_CORE_REGISTER_1281_FREQ_SEL_INDEX | DDRSS_PHY_CORE_REGISTER_1281_MULTICAST_EN;
-			} else {
-				ddrss_save_restore[j] = mmio_read_32(DDR_PHY_CORE_REG_BASE + i * 4);
-			}
-		}
-	}
-}
+// 		/* Save the second register set */
+// 		for (i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
+// 			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4);
+// 		}
+// 		for (i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
+// 			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4);
+// 		}
+// 		for (i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
+// 			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4);
+// 		}
+// 		for (i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
+// 			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4);
+// 		}
+// 		for (i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
+// 			ddrss_save_restore[j] = mmio_read_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4);
+// 		}
+// 		/* Save the DDR PHY set with correct frequency select index */
+// 		for (i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
+// 			if (i == DDRSS_PHY_CORE_REGISTER_1281_POS) {
+// 				ddrss_save_restore[j] = DDRSS_PHY_CORE_REGISTER_1281_FREQ_SEL_INDEX | DDRSS_PHY_CORE_REGISTER_1281_MULTICAST_EN;
+// 			} else {
+// 				ddrss_save_restore[j] = mmio_read_32(DDR_PHY_CORE_REG_BASE + i * 4);
+// 			}
+// 		}
+// 	}
+// }
 
 /**
  * @brief Restore DDR registers from memory
  *
  * @param h Pointer to EMIF handle structure
  */
-__wkupsramfunc static void restore_ddr_registers(struct emif_handle_s *h)
-{
-	int j;
+// __wkupsramfunc static void restore_ddr_registers(struct emif_handle_s *h)
+// {
+// 	int j;
 
-	/* DDRSS Memory Base */
-	uint32_t DDR_CTL_REG_BASE = h->ctl_cfg_base_addr;
-	uint32_t DDR_PI_REG_BASE = (h->ctl_cfg_base_addr) +
-				   DDRSS_PI_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_DATA_SLICE_0_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_0_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_DATA_SLICE_1_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_1_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_ADDR_SLICE_0_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_0_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_ADDR_SLICE_1_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_1_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_ADDR_SLICE_2_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_2_REGISTER_BLOCK_OFFS;
-	uint32_t DDR_PHY_CORE_REG_BASE =
-		(h->ctl_cfg_base_addr) + DDRSS_PHY_CORE_REGISTER_BLOCK_OFFS;
+// 	/* DDRSS Memory Base */
+// 	uint32_t DDR_CTL_REG_BASE = h->ctl_cfg_base_addr;
+// 	uint32_t DDR_PI_REG_BASE = (h->ctl_cfg_base_addr) +
+// 				   DDRSS_PI_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_DATA_SLICE_0_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_0_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_DATA_SLICE_1_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_DATA_SLICE_1_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_ADDR_SLICE_0_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_0_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_ADDR_SLICE_1_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_1_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_ADDR_SLICE_2_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_ADDRESS_SLICE_2_REGISTER_BLOCK_OFFS;
+// 	uint32_t DDR_PHY_CORE_REG_BASE =
+// 		(h->ctl_cfg_base_addr) + DDRSS_PHY_CORE_REGISTER_BLOCK_OFFS;
 
-	mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_CTL_(0), dram_class << DDR_MEM_CLASS_SHIFT);
-	/* Skip the first CTL register write */
-	j = 1;
-	for (int i = 1; i < NUM_DDR_CTL_REG; i++, j++) {
-		mmio_write_32(DDR_CTL_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
-	mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PI_(0), dram_class << DDR_MEM_CLASS_SHIFT);
-	/* Skip the first PI register write */
-	j++;
-	for (int i = 1; i < NUM_DDR_PI_REG; i++, j++) {
-		mmio_write_32(DDR_PI_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
+// 	mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_CTL_(0), dram_class << DDR_MEM_CLASS_SHIFT);
+// 	/* Skip the first CTL register write */
+// 	j = 1;
+// 	for (int i = 1; i < NUM_DDR_CTL_REG; i++, j++) {
+// 		mmio_write_32(DDR_CTL_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
+// 	mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PI_(0), dram_class << DDR_MEM_CLASS_SHIFT);
+// 	/* Skip the first PI register write */
+// 	j++;
+// 	for (int i = 1; i < NUM_DDR_PI_REG; i++, j++) {
+// 		mmio_write_32(DDR_PI_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
 
-	/* Restore the second frequency set conditionally */
-	if (ddrss_is_fsp_supported == 1) {
-		/* Increment the j to get location where the second set was saved */
-		j = j + NUM_ALL_PHY_REG;
+// 	/* Restore the second frequency set conditionally */
+// 	if (ddrss_is_fsp_supported == 1) {
+// 		/* Increment the j to get location where the second set was saved */
+// 		j = j + NUM_ALL_PHY_REG;
 
-		for (int i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
-			mmio_write_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
-		}
-		for (int i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
-			mmio_write_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
-		}
-		for (int i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
-			mmio_write_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
-		}
-		for (int i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
-			mmio_write_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
-		}
-		for (int i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
-			mmio_write_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4, ddrss_save_restore[j]);
-		}
-		for (int i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
-			mmio_write_32(DDR_PHY_CORE_REG_BASE + i * 4, ddrss_save_restore[j]);
-		}
+// 		for (int i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
+// 			mmio_write_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 		}
+// 		for (int i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
+// 			mmio_write_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 		}
+// 		for (int i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
+// 			mmio_write_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 		}
+// 		for (int i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
+// 			mmio_write_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 		}
+// 		for (int i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
+// 			mmio_write_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 		}
+// 		for (int i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
+// 			mmio_write_32(DDR_PHY_CORE_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 		}
 
-		/* Disable multicast to save another set */
-		mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PHY_(1281), 0U);
+// 		/* Disable multicast to save another set */
+// 		mmio_write_32(DDR_CTL_REG_BASE + CTLCFG_DENALI_PHY_(1281), 0U);
 
-		/* Adjust the index of j to point to the first register set */
-		j = j - (NUM_ALL_PHY_REG << 1);
-	}
+// 		/* Adjust the index of j to point to the first register set */
+// 		j = j - (NUM_ALL_PHY_REG << 1);
+// 	}
 
-	/* Restore the first frequency register set */
-	for (int i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
-		mmio_write_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
-	for (int i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
-		mmio_write_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
-	for (int i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
-		mmio_write_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
-	for (int i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
-		mmio_write_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
-	for (int i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
-		mmio_write_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
-	for (int i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
-		mmio_write_32(DDR_PHY_CORE_REG_BASE + i * 4, ddrss_save_restore[j]);
-	}
-}
+// 	/* Restore the first frequency register set */
+// 	for (int i = 0; i < NUM_DDR_DATA_0_REG; i++, j++) {
+// 		mmio_write_32(DDR_PHY_DATA_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
+// 	for (int i = 0; i < NUM_DDR_DATA_1_REG; i++, j++) {
+// 		mmio_write_32(DDR_PHY_DATA_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
+// 	for (int i = 0; i < NUM_DDR_ADDR_0_REG; i++, j++) {
+// 		mmio_write_32(DDR_PHY_ADDR_SLICE_0_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
+// 	for (int i = 0; i < NUM_DDR_ADDR_1_REG; i++, j++) {
+// 		mmio_write_32(DDR_PHY_ADDR_SLICE_1_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
+// 	for (int i = 0; i < NUM_DDR_ADDR_2_REG; i++, j++) {
+// 		mmio_write_32(DDR_PHY_ADDR_SLICE_2_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
+// 	for (int i = 0; i < NUM_DDR_PHY_REG; i++, j++) {
+// 		mmio_write_32(DDR_PHY_CORE_REG_BASE + i * 4, ddrss_save_restore[j]);
+// 	}
+// }
 
 /**
  * @brief DDR deep sleep resume sequence
  *
  * @param h Pointer to EMIF handle structure
  */
-__wkupsramfunc static void ddr_deep_sleep_resume_sequence(struct emif_handle_s *h)
-{
-	uint32_t lp_status;
+// __wkupsramfunc static void ddr_deep_sleep_resume_sequence(struct emif_handle_s *h)
+// {
+// 	uint32_t lp_status;
 
-	restore_sdram_region_idx(h);
+// 	restore_sdram_region_idx(h);
 
-	/* Write back the copied registers */
-	restore_ddr_registers(h);
+// 	/* Write back the copied registers */
+// 	restore_ddr_registers(h);
 
-	/* Configure PHY and PI settings for resume sequence */
-	/* PHY_1306: Set DFI input 0 - configures DFI interface input settings */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PHY_(1306), 0x1, 1, 0);
-	/* PI_4: Disable PI_INIT_LVL_EN - disable initialization leveling */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(4), 0x0, 1, 0);
-	/* CTL_20: Enable PHY_INDEP_TRAIN_MODE - enable independent PHY training mode */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(20), 0x1, 1, 24);
-	/* CTL_21: Enable PHY_INDEP_INIT_MODE - enable independent PHY initialization mode */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(21), 0x1, 1, 8);
-	/* PI_138: Enable PI_DLL_RST - enable DLL reset */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(138), 0x1, 1, 0);
-	/* CTL_106: Disable PWRUP_SREFRESH_EXIT - disable power-up self-refresh exit */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(106), 0x0, 1, 0);
-	/* PI_134: Enable PI_PWRUP_SREFRESH_EXIT - enable PI power-up self-refresh exit */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(134), 0x1, 1, 8);
-	/* PI_138: Enable PI_DRAM_INIT_EN - enable DRAM initialization */
-	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(138), 0x1, 1, 8);
+// 	/* Configure PHY and PI settings for resume sequence */
+// 	/* PHY_1306: Set DFI input 0 - configures DFI interface input settings */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PHY_(1306), 0x1, 1, 0);
+// 	/* PI_4: Disable PI_INIT_LVL_EN - disable initialization leveling */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(4), 0x0, 1, 0);
+// 	/* CTL_20: Enable PHY_INDEP_TRAIN_MODE - enable independent PHY training mode */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(20), 0x1, 1, 24);
+// 	/* CTL_21: Enable PHY_INDEP_INIT_MODE - enable independent PHY initialization mode */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(21), 0x1, 1, 8);
+// 	/* PI_138: Enable PI_DLL_RST - enable DLL reset */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(138), 0x1, 1, 0);
+// 	/* CTL_106: Disable PWRUP_SREFRESH_EXIT - disable power-up self-refresh exit */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(106), 0x0, 1, 0);
+// 	/* PI_134: Enable PI_PWRUP_SREFRESH_EXIT - enable PI power-up self-refresh exit */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(134), 0x1, 1, 8);
+// 	/* PI_138: Enable PI_DRAM_INIT_EN - enable DRAM initialization */
+// 	write_mmr_field(h->ctl_cfg_base_addr + CTLCFG_DENALI_PI_(138), 0x1, 1, 8);
 
-	/* De-asserting data retention pin and wake Control bits */
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 1U, 31U);
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 4U, 0U);
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x1U, 1U, 31U);
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 4U, 0U);
-	lp_status = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
-	while (lp_status != ((1U << 31U))) {
-		lp_status = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
-	}
-	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0, 1, 31);
+// 	/* De-asserting data retention pin and wake Control bits */
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 1U, 31U);
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 4U, 0U);
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x1U, 1U, 31U);
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0U, 4U, 0U);
+// 	lp_status = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
+// 	while (lp_status != ((1U << 31U))) {
+// 		lp_status = mmio_read_32((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL));
+// 	}
+// 	write_mmr_field((WKUP_CTRL_MMR_SEC_4_BASE + DDR32SS_PMCTRL), 0x0, 1, 31);
 
-	/* Start Initialization [PI_START=1 and START=1] */
-	start_PI_CTL_init(h);
+// 	/* Start Initialization [PI_START=1 and START=1] */
+// 	start_PI_CTL_init(h);
 
-	/* Wait for INIT_DONE interrupt */
-	poll_for_init_completion(h);
-}
+// 	/* Wait for INIT_DONE interrupt */
+// 	poll_for_init_completion(h);
+// }
 
 /**
  * @brief Enter LPM self refresh mode
@@ -643,7 +643,8 @@ __wkupsramfunc static void enter_lpm_self_refresh(struct emif_handle_s *h)
 	/* Program Self Refresh mode Self refresh long with memory clock gating */
 	mmio_write_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(158),
 			(LP_MODE_LONG_SELF_REFRESH << 8));
-
+	uint32_t DDR_CTL_REG_BASE = h->ctl_cfg_base_addr;
+	dram_class = ((mmio_read_32(DDR_CTL_REG_BASE) & DDR_MEM_CLASS_MASK)) >> DDR_MEM_CLASS_SHIFT;
 	if (dram_class == LPDDR4_DRAM_CLASS_REG_VALUE) {
 		lp_status_expected = 0x4EU;
 	} else if (dram_class == DDR4_DRAM_CLASS_REG_VALUE) {
@@ -661,16 +662,33 @@ __wkupsramfunc static void enter_lpm_self_refresh(struct emif_handle_s *h)
 	}
 }
 
+__wkupsramfunc static void exit_lpm_self_refresh(struct emif_handle_s *h)
+{
+	uint32_t lp_status = 0;
+	uint32_t lp_status_expected = 0x40;
+
+	/* Program Self Refresh mode Self refresh long with memory clock gating */
+	mmio_write_32(h->ctl_cfg_base_addr + CTLCFG_DENALI_CTL_(158),
+			(0x2 << 8));
+			
+	/* Poll for Self Refresh Mode change */
+	while (lp_status != lp_status_expected) {
+		lp_status = ((mmio_read_32(h->ctl_cfg_base_addr +
+				CTLCFG_DENALI_CTL_(167)) &
+				0x7F00) >> 8);
+	}
+}
+
 __wkupsramfunc int32_t k3low_ddr_deep_sleep_suspend_sequence(void)
 {
 	/* Save DDR register context in WKUP SRAM, Put the DDR in self refresh */
 	emif_instance_select(&Emifhandle);
-	save_ddr_registers(&Emifhandle);
+	// save_ddr_registers(&Emifhandle);
 	enter_lpm_self_refresh(&Emifhandle);
 	/* Enable DDR data retention by writing b0110 to
 	 * WKUP_CTRL_MMR.DDR32SS_PMCTRL.data_retention
 	 */
-	enable_ddr_data_retention();
+	// enable_ddr_data_retention();
 
 	return 0;
 }
@@ -681,7 +699,7 @@ __wkupsramfunc int32_t k3low_ddr_deep_sleep_resume_sequence(void)
 	 * retaining of DDR & Remove DDR data retention
 	 */
 	emif_instance_select(&Emifhandle);
-	ddr_deep_sleep_resume_sequence(&Emifhandle);
+	exit_lpm_self_refresh(&Emifhandle);
 
 	return 0;
 }
